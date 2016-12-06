@@ -1,0 +1,2862 @@
+transformation eerTorelational(eer:eer, rdbm:relational){
+	key relational::DataType{name};
+    key relational::Column{name, table};
+	key relational::ForeignKey{name};
+	key relational::UniqueConstraint{name};
+	key relational::Trigger{name};
+    key relational::BaseTable{name};
+    
+	top relation schema_EER_to_schema_REL {
+	  checkonly domain eer schema_EER : eer::Schema {};
+	  enforce domain rdbm schema_Rel : relational::Schema {
+	    name = 'fromEER'
+	  };	  
+	}
+
+	top relation entity_to_table {
+	  e_name : String;
+	  checkonly domain eer entity: eer::Entity{
+        name = e_name,
+        schema = schema_EER : eer::Schema{}
+      };
+	  enforce domain rdbm table : relational::BaseTable {
+        name = e_name , 
+        schema = schema_REL : relational::Schema{} 
+      };
+      when{
+        schema_EER_to_schema_REL(schema_EER, schema_REL); 
+        entity.isWeak = false;
+        entity.inheritanceSL->size()=0;
+        entity.directInheritanceLinkTarget->size()=0;
+      }
+      where{
+        element_attribute_to_column('', entity, table);
+        element_attribute_compound_to_column('', entity , table);
+        element_attribute_to_pk('', entity.name, entity , table);
+        element_attribute_compound_to_pk('', entity.name, entity , table);
+        element_attribute_to_table(entity.name, entity.name, entity, table, entity);
+        element_attribute_compound_to_table(entity.name, entity.name, entity, table, entity);
+      }
+	}
+
+	relation element_attribute_to_column {
+      data_type : String;
+	  attr_name: String;
+      dt : eer::DataType;
+      is_nullable: Boolean;
+      primitive domain prefix : String;
+	  checkonly domain eer element :eer::Element{
+        AttributeLinkSource = attr_link_root : eer::AttributeLink{
+          target = attr_root : eer::Attribute{
+            name = attr_name,
+            dataType = dt,
+            isNull = is_nullable 
+          }
+        }          
+      };
+      enforce domain rdbm table : relational::BaseTable {
+        columns = col : relational::Column{
+          nullable = is_nullable, 
+          name = prefix+attr_name,
+          table = table,
+          dataType = dt_rel : relational::DataType{
+            name = data_type
+          }
+        }
+      };
+      when{
+        attr_root.AttributeLinkSource->isEmpty();
+        (attr_root.type = eer::AttributeType::DERIVED or attr_root.type = eer::AttributeType::COMMON);
+      }
+      where{
+        data_type = getDataType(dt);
+      }
+	}
+    
+	relation element_attribute_compound_to_column {
+	  attr_name : String;
+	  data_type : String;
+      dt : eer::DataType;
+      is_nullable: Boolean;
+      primitive domain prefix : String;
+	  checkonly domain eer element :eer::Element{
+        AttributeLinkSource = attr_link_root : eer::AttributeLink{
+          target = attr_root : eer::Attribute{
+            AttributeLinkSource = attr_link_leaf : eer::AttributeLink{
+              target = attr_leaf : eer::Attribute {
+                name = attr_name,
+                dataType = dt, 
+                isNull = is_nullable 
+              }
+            }
+          }
+        }          
+      };
+      enforce domain rdbm table : relational::BaseTable {
+        columns = col : relational::Column{
+          nullable = is_nullable, 
+          name = prefix+attr_name,
+          table = table,
+          dataType = dt_rel : relational::DataType{
+            name = data_type
+          }
+        }
+      };
+      when{
+        not(attr_root.AttributeLinkSource->isEmpty());
+        (attr_root.type = eer::AttributeType::DERIVED or attr_root.type = eer::AttributeType::COMMON);
+      }
+      where{
+        data_type = getDataType(dt);
+      }
+	}
+	
+	relation element_attribute_to_pk {
+	  attr_name : String;
+	  data_type : String;
+      dt : eer::DataType;
+      primitive domain prefix : String;
+      primitive domain table_name : String;
+	  checkonly domain eer element :eer::Element{
+        AttributeLinkSource = attr_link_root : eer::AttributeLink{
+          target = attr_root : eer::Attribute{
+            name = attr_name,
+            dataType = dt 
+          }
+        }          
+      };
+      enforce domain rdbm table : relational::BaseTable {
+        constraints = pk :  relational::PrimaryKey{
+          name = 'PK_'+table_name,
+          members = col : relational::Column{
+            nullable = false, 
+            name = prefix+attr_name,
+            table = table,
+            dataType = dt_rel : relational::DataType{
+              name = data_type
+            }
+          }
+        }
+      };
+      when{
+        attr_root.AttributeLinkSource->isEmpty();
+        (attr_root.type = eer::AttributeType::IDENTIFIER or attr_root.type = eer::AttributeType::DISCRIMINATOR);
+      }
+      where{
+        data_type = getDataType(dt); 
+      }
+	}
+	
+	relation element_attribute_compound_to_pk {
+	  attr_name : String;
+	  data_type : String;
+      dt : eer::DataType;
+      primitive domain prefix : String;
+      primitive domain table_name : String;
+	  checkonly domain eer element :eer::Element{
+        AttributeLinkSource = attr_link_root : eer::AttributeLink{
+          target = attr_root : eer::Attribute{
+            AttributeLinkSource = attr_link_leaf : eer::AttributeLink{
+              target = attr_leaf : eer::Attribute {
+                name = attr_name,
+                dataType = dt 
+              }
+            }
+          }
+        }          
+      };
+      enforce domain rdbm table : relational::BaseTable {
+        constraints = pk :  relational::PrimaryKey{
+        name = 'PK_'+table_name,
+          members = col : relational::Column{
+            nullable = false, 
+            name = prefix+attr_name,
+            table = table,
+            dataType = dt_rel : relational::DataType{
+              name = data_type
+            }
+          }
+        }
+      };
+      when{
+        not(attr_root.AttributeLinkSource->isEmpty());
+        (attr_root.type = eer::AttributeType::IDENTIFIER or attr_root.type = eer::AttributeType::DISCRIMINATOR);
+      }
+      where{
+        data_type = getDataType(dt);
+      }
+	}
+    
+    relation element_attribute_to_unique {
+	  attr_name : String;
+	  data_type : String;
+      dt : eer::DataType;
+      primitive domain prefix : String;
+      primitive domain table_name : String;
+	  checkonly domain eer element :eer::Element{
+        AttributeLinkSource = attr_link_root : eer::AttributeLink{
+          target = attr_root : eer::Attribute{
+            name = attr_name,
+            dataType = dt 
+          }
+        }          
+      };
+      enforce domain rdbm table : relational::BaseTable {
+        constraints = pk :  relational::UniqueConstraint{
+          name = 'UNIQUE_'+table_name,
+          members = col : relational::Column{
+            name = prefix+attr_name,
+            table = table,
+            dataType = dt_rel : relational::DataType{
+              name = data_type
+            }
+          }
+        }
+      };
+      when{
+        attr_root.AttributeLinkSource->isEmpty();
+        (attr_root.type = eer::AttributeType::IDENTIFIER or attr_root.type = eer::AttributeType::DISCRIMINATOR);
+      }
+      where{
+        data_type = getDataType(dt); 
+      }
+	}
+	
+    relation element_attribute_compound_to_unique {
+	  attr_name : String;
+	  data_type : String;
+      dt : eer::DataType;
+      primitive domain prefix : String;
+      primitive domain table_name : String;
+	  checkonly domain eer element :eer::Element{
+        AttributeLinkSource = attr_link_root : eer::AttributeLink{
+          target = attr_root : eer::Attribute{
+            AttributeLinkSource = attr_link_leaf : eer::AttributeLink{
+              target = attr_leaf : eer::Attribute {
+                name = attr_name,
+                dataType = dt 
+              }
+            }
+          }
+        }          
+      };
+      enforce domain rdbm table : relational::BaseTable {
+        constraints = pk :  relational::UniqueConstraint{
+        name = 'UNIQUE_'+table_name,
+          members = col : relational::Column{
+            nullable = false, 
+            name = prefix+attr_name,
+            table = table,
+            dataType = dt_rel : relational::DataType{
+              name = data_type
+            }
+          }
+        }
+      };
+      when{
+        not(attr_root.AttributeLinkSource->isEmpty());
+        (attr_root.type = eer::AttributeType::IDENTIFIER or attr_root.type = eer::AttributeType::DISCRIMINATOR);
+      }
+      where{
+        data_type = getDataType(dt);
+      }
+	}
+	
+	relation element_attribute_to_fk {
+	  attr_name : String;
+	  data_type : String;
+      dt : eer::DataType;
+      null : Boolean;
+      primitive domain prefix : String;
+      primitive domain table_name : String;
+	  primitive domain is_nullable : String;
+	  checkonly domain rdbm table_referenced : relational::BaseTable {};
+	  checkonly domain eer e :eer::Element{
+        AttributeLinkSource = attr_link_root : eer::AttributeLink{
+          target = attr_root : eer::Attribute{
+            name = attr_name,
+            dataType = dt 
+          }
+        }          
+      };
+      enforce domain rdbm table : relational::BaseTable {
+        referencingForeignKeys = fk : relational::ForeignKey{
+          name = 'FK_'+prefix,
+          baseTable = table_referenced,
+          referencedTable = table,
+		  uniqueConstraint = constraints : relational::PrimaryKey{
+            name = 'PK_'+table_name
+          },
+          members = col : relational::Column{
+            nullable = null,
+            name = prefix+'_'+attr_name,
+            table = table_referenced,
+            dataType = te : relational::DataType{
+              name = data_type
+            }
+          }
+        }
+      };
+      when{
+        attr_root.AttributeLinkSource->isEmpty();
+        (attr_root.type = eer::AttributeType::IDENTIFIER or attr_root.type = eer::AttributeType::DISCRIMINATOR);
+      }
+      where{
+        data_type = getDataType(dt);
+        null = if is_nullable = 'false' then
+          false else true endif;
+      }
+	}
+	
+    relation element_attribute_compound_to_fk {
+	  attr_name : String;
+	  data_type : String;
+      dt : eer::DataType;
+      null : Boolean;
+      primitive domain prefix : String;
+      primitive domain table_name : String;
+	  primitive domain is_nullable : String;
+	  checkonly domain rdbm table_referenced : relational::BaseTable {};
+	  checkonly domain eer e :eer::Element{
+        AttributeLinkSource = attr_link_root : eer::AttributeLink{
+          target = attr_root : eer::Attribute{
+            AttributeLinkSource = al2 : eer::AttributeLink{
+              target = attr_leaf : eer::Attribute {
+                name = attr_name,
+                dataType = dt 
+              }
+            }
+          }
+        }          
+      };
+      enforce domain rdbm table : relational::BaseTable {
+        referencingForeignKeys = fk : relational::ForeignKey{
+          name = 'FK_'+prefix,
+          baseTable = table_referenced,
+          referencedTable = table,
+		  uniqueConstraint = constraints : relational::PrimaryKey{
+            //baseTable = table ,
+            name = 'PK_'+table_name
+          },
+          members = col : relational::Column{
+            nullable = null,
+            name = prefix+'_'+attr_name,
+            table = table_referenced,
+            dataType = te : relational::DataType{
+              name = data_type
+            }
+          }
+        }
+      };
+      when{
+        not(attr_root.AttributeLinkSource->isEmpty());
+        (attr_root.type = eer::AttributeType::IDENTIFIER or attr_root.type = eer::AttributeType::DISCRIMINATOR);
+      }
+      where{
+        data_type = getDataType(dt);
+        null = if is_nullable = 'false' then
+          false else true endif;
+      }
+	}
+	
+	relation element_attribute_to_fk_with_table {
+	  attr_name : String;
+	  data_type : String;
+      dt : eer::DataType;
+      null : Boolean;
+      primitive domain prefix : String;
+      primitive domain table_name : String;
+	  primitive domain is_nullable : String;
+	  checkonly domain rdbm table_referenced : relational::BaseTable {};
+	  checkonly domain eer e :eer::Element{
+        AttributeLinkSource = attr_link_root : eer::AttributeLink{
+          target = attr_root : eer::Attribute{
+            name = attr_name,
+            dataType = dt 
+          }
+        }          
+      };
+      enforce domain rdbm table : relational::BaseTable {
+        referencingForeignKeys = fk : relational::ForeignKey{
+          name = 'FK_'+prefix,
+          baseTable = table_referenced,
+          referencedTable = table,
+		  uniqueConstraint = constraints : relational::PrimaryKey{
+            //baseTable = table ,
+            name = 'PK_'+table_name
+          },
+          members = col : relational::Column{
+            nullable = null,
+            name = prefix+'_'+e.name+'_'+attr_name,
+            table = table_referenced,
+            dataType = te : relational::DataType{
+              name = data_type
+            }
+          }
+        }
+      };
+      when{
+        attr_root.AttributeLinkSource->isEmpty();
+        (attr_root.type = eer::AttributeType::IDENTIFIER or attr_root.type = eer::AttributeType::DISCRIMINATOR);
+      }
+      where{
+        data_type = getDataType(dt);
+        null = if is_nullable = 'false' then
+          false else true endif;
+      }
+	}	
+	
+    relation element_attribute_compound_to_fk_with_table {
+	  attr_name : String;
+	  data_type : String;
+      dt : eer::DataType;
+      null : Boolean;
+      primitive domain prefix : String;
+      primitive domain table_name : String;
+	  primitive domain is_nullable : String;
+	  checkonly domain rdbm table_referenced : relational::BaseTable {};
+      checkonly domain eer e :eer::Element{
+        AttributeLinkSource = attr_link_root : eer::AttributeLink{
+          target = attr_root : eer::Attribute{
+            AttributeLinkSource = al2 : eer::AttributeLink{
+              target = attr_leaf : eer::Attribute {
+                name = attr_name,
+                dataType = dt 
+              }
+            }
+          }
+        }          
+      };       
+      enforce domain rdbm table : relational::BaseTable {
+        referencingForeignKeys = fk : relational::ForeignKey{
+          name = 'FK_'+prefix,
+          baseTable = table_referenced,
+          referencedTable = table,
+		  uniqueConstraint = constraints : relational::PrimaryKey{
+            //baseTable = table ,
+            name = 'PK_'+table_name
+          },
+          members = col : relational::Column{
+            nullable = null,
+            name = prefix+'_'+e.name+'_'+attr_name,
+            table = table_referenced,
+            dataType = te : relational::DataType{
+              name = data_type
+            }
+          }
+        }
+      };
+      when{
+        not(attr_root.AttributeLinkSource->isEmpty());
+        (attr_root.type = eer::AttributeType::IDENTIFIER or attr_root.type = eer::AttributeType::DISCRIMINATOR);
+      }
+      where{
+        data_type = getDataType(dt);
+        null = if is_nullable = 'false' then
+          false else true endif;
+      }
+	}
+	
+    relation element_attribute_to_table {
+	  attr_name : String;
+	  data_type : String;
+      dt : eer::DataType;
+      primitive domain prefix: String;
+      primitive domain table_name : String;
+	  checkonly domain eer element :eer::Element{
+	    AttributeLinkSource = attr_link_root : eer::AttributeLink{
+          target = attr_root : eer::Attribute{
+            name = attr_name,
+            dataType = dt
+          }
+        }          
+	  };
+	  enforce domain rdbm table : relational::BaseTable {
+	    referencingForeignKeys = fk : relational::ForeignKey{
+	       name = 'FK_'+table_name+'_'+attr_name,
+	       baseTable = base_table : relational::BaseTable {
+	         name = table_name+'_'+attr_name,
+	         constraints = pk :  relational::PrimaryKey{
+	           name = 'PK_'+table_name+'_'+attr_name,
+	           members = col : relational::Column{
+                 nullable = false, 
+                 name = attr_name,
+                 table = base_table,
+                 dataType = te : relational::DataType{
+                   name = data_type
+                 }
+               }
+	         }
+	       },
+	       uniqueConstraint = constraints : relational::PrimaryKey{
+            name = 'PK_'+table_name
+           }
+	    }
+      };
+      checkonly domain eer element_aux :eer::Element{
+	  };
+      when{
+        attr_root.type = eer::AttributeType::MULTIVALUED;
+        attr_root.AttributeLinkSource->isEmpty();
+	  }
+      where{
+        data_type = getDataType(dt);
+         if(attr_root.isUnique = false ) then
+          element_attribute_to_pk(table_name+'_'+attr_name+'_', table_name+'_'+attr_name, element_aux , base_table) or
+          element_attribute_compound_to_pk(table_name+'_'+attr_name+'_', table_name+'_'+attr_name, element_aux , base_table) or 
+          weak_entity_to_pk(table_name+'_'+attr_name, table_name+'_'+attr_name, element_aux , base_table) or 
+          true
+        else
+          true
+        endif;  
+        (element_attribute_to_fk(table_name+'_'+attr_name, table.name, 'false', base_table, element_aux, table ) or
+        element_attribute_compound_to_fk(table_name+'_'+attr_name, table.name, 'false', base_table, element_aux, table ) or 
+        weak_entity_to_fk(table_name+'_'+attr_name, table_name+'_'+attr_name, 'false', table, element_aux , base_table ) or 
+         true );
+      }
+	}
+	
+	relation element_attribute_compound_to_table {
+	  attr_name : String;
+	  attr_name_leaf : String;
+	  data_type : String;
+      dt : eer::DataType;
+      primitive domain prefix: String;
+      primitive domain table_name : String;      
+	  checkonly domain eer element :eer::Element{
+	    AttributeLinkSource = attr_link_root : eer::AttributeLink{
+          target = attr_root : eer::Attribute{
+            name = attr_name,
+            AttributeLinkSource = attr_link_leaf : eer::AttributeLink{
+              target = attr_leaf : eer::Attribute {
+                 name = attr_name_leaf,
+                dataType = dt
+              }
+            }
+          }  
+        }          
+	  };
+	  enforce domain rdbm table : relational::BaseTable {
+	    //name = table_name,
+	    referencingForeignKeys = fk : relational::ForeignKey{
+	       name = 'FK_'+table_name+'_'+attr_name,
+	       baseTable = base_table : relational::BaseTable {
+	         name = table_name+'_'+attr_name,
+	         constraints = pk :  relational::PrimaryKey{
+	           name = 'PK_'+table_name+'_'+attr_name,
+	           members = col : relational::Column{
+                 nullable = false, 
+                 name = attr_name_leaf,
+                 table = base_table,
+                 dataType = te : relational::DataType{
+                   name = data_type
+                 }
+               }
+	         }
+	       }
+	    }
+      };
+      checkonly domain eer element_aux :eer::Element{
+	  };
+      when{
+        attr_root.type = eer::AttributeType::MULTIVALUED;
+        not(attr_root.AttributeLinkSource->isEmpty());
+	  }
+      where{
+        data_type = getDataType(dt);
+        if(attr_root.isUnique = false ) then
+          element_attribute_to_pk(table_name+'_'+attr_name+'_', table_name+'_'+attr_name, element_aux , base_table) or
+          element_attribute_compound_to_pk(table_name+'_'+attr_name+'_', table_name+'_'+attr_name, element_aux , base_table) or 
+          weak_entity_to_pk(table_name+'_'+attr_name, table_name+'_'+attr_name, element_aux , base_table) or 
+          true
+        else
+          true
+        endif;  
+        (element_attribute_to_fk(table_name+'_'+attr_name, table.name, 'false', base_table, element_aux, table ) or
+        element_attribute_compound_to_fk(table_name+'_'+attr_name, table.name, 'false', base_table, element_aux, table ) or 
+        weak_entity_to_fk(table_name+'_'+attr_name, table_name+'_'+attr_name, 'false', table, element_aux , base_table ) or 
+         true );      
+      }
+	}
+	
+	top relation weak_entity_to_table{
+	  table_left : relational::BaseTable; 
+	  rel_link_left : eer::RelationshipLink;
+	  entity_left : eer::EntityType ;	  
+	  entity_right : eer::EntityType ;	
+	  checkonly domain eer weak_entity : eer::Entity {
+	    isWeak = true,
+	    relationshipLink = rel_link_right : eer::RelationshipLink{
+	      isIdentifier = true,
+	      target = relationship : eer::Relationship {
+	      }
+	    }    
+	  };
+	  enforce domain rdbm table : relational::BaseTable {
+	    name = weak_entity.name
+	  };
+	  when{
+	    relationship.associativeEntity.oclIsUndefined();
+	    relationship.relationshipLink->size() = 2;
+	    rel_link_left = relationship.relationshipLink->select(x : eer::RelationshipLink | x.isIdentifier = false)->at(1);
+	    rel_link_left <> rel_link_right;
+	    entity_left = rel_link_left.source; 
+	    entity_right = rel_link_right.source;
+	    entity_to_table(entity_left, table_left) or weak_entity_to_table(entity_left, table_left) or
+	    direct_inheritance_to_table(entity_left, table_left) or specialized_inheritance_to_table(entity_left, table_left) or 
+	    associative_entity_1_1_to_table(entity_left, table_left) or associative_entity_1_N_to_table(entity_left, table_left) or
+	    associative_entity_N_N_to_table(entity_left, table_left) or associative_entity_nary_to_table(entity_left, table_left);
+	  }
+	  where{
+	    element_attribute_to_column('', weak_entity, table);
+        element_attribute_compound_to_column('', weak_entity , table);
+        element_attribute_to_pk('', weak_entity.name, weak_entity , table);
+        element_attribute_compound_to_pk('', weak_entity.name, weak_entity , table);
+        element_attribute_to_table(weak_entity.name, weak_entity.name, weak_entity, table, weak_entity);
+        element_attribute_compound_to_table(weak_entity.name, weak_entity.name, weak_entity, table, weak_entity);
+        /*Set attributes of relationship to the Weak Entity*/
+        element_attribute_to_column(relationship.name+'_', relationship, table);
+        element_attribute_compound_to_column(relationship.name+'_', relationship , table);
+        element_attribute_to_table(weak_entity.name, weak_entity.name, relationship, table, weak_entity);
+        element_attribute_compound_to_table(weak_entity.name, weak_entity.name, relationship, table, weak_entity);
+        /*Set PK entity left as PK of the Weak Entity*/
+	    element_attribute_to_pk(relationship.name+'_'+entity_left.name+'_', weak_entity.name, entity_left , table);
+	    element_attribute_compound_to_pk(relationship.name+'_'+entity_left.name+'_', weak_entity.name, entity_left , table);
+	    element_attribute_to_fk(relationship.name+'_'+entity_left.name, entity_left.name, 'false', table, entity_left, table_left); 
+	    element_attribute_compound_to_fk(relationship.name+'_'+entity_left.name, entity_left.name, 'false', table, entity_left, table_left); 
+	    weak_entity_to_pk(relationship.name+'_'+entity_left.name, weak_entity.name, entity_left , table);
+	    weak_entity_to_fk(relationship.name+'_'+entity_left.name, weak_entity.name,'false', table_left , entity_left , table);
+	    direct_inheritance_to_pk(relationship.name+'_'+entity_left.name, weak_entity.name, entity_left, table);
+	    direct_inheritance_to_fk(relationship.name+'_'+entity_left.name, weak_entity.name, 'false', table_left ,entity_left, table);
+	    specialized_inheritance_to_pk(relationship.name+'_'+entity_left.name, weak_entity.name, entity_left , table);
+        specialized_inheritance_to_fk(relationship.name+'_'+entity_left.name, weak_entity.name,'false', table_left , entity_left , table); 
+		associative_entity_1_1_to_pk(relationship.name+'_'+entity_left.name, weak_entity.name, entity_left , table);
+		associative_entity_1_1_to_fk(relationship.name+'_'+entity_left.name, weak_entity.name,'false', table_left , entity_left , table); 	 
+	    associative_entity_1_N_to_pk(relationship.name+'_'+entity_left.name, weak_entity.name, entity_left , table);
+		associative_entity_1_N_to_fk(relationship.name+'_'+entity_left.name, weak_entity.name,'false', table_left , entity_left , table);
+	    associative_entity_N_N_to_pk(relationship.name+'_'+entity_left.name, weak_entity.name, entity_left , table);
+		associative_entity_N_N_to_fk(relationship.name+'_'+entity_left.name, weak_entity.name,'false', table_left , entity_left , table); 
+		//associative_nary_to_pk(relationship.name+'_'+entity_left.name, weak_entity.name, entity_left , table);
+		//associative_nary_to_fk(relationship.name+'_'+entity_left.name, weak_entity.name,'false', table_left , entity_left , table);
+		
+		 if rel_link_left.participation = eer::CompletenessType::TOTAL then	       
+           trigger_insert(entity_right.name, relationship.name, entity_left, table_left) or
+	       trigger_update_or_delete(entity_left.name, relationship.name, entity_right, table) or true
+	    else
+	      true
+	    endif;
+	  }
+	}
+	
+    relation weak_entity_to_pk{
+	  rel_link_left : eer::RelationshipLink;
+	  entity_left : eer::EntityType ;
+	  table_left : relational::BaseTable; 
+	  primitive domain prefix: String;
+      primitive domain table_name : String; 
+	  checkonly domain eer weak_entity : eer::Entity {
+	    isWeak = true,
+	    relationshipLink = rel_link_right : eer::RelationshipLink{
+	      isIdentifier = true,
+	      target = relationship : eer::Relationship {
+	      }
+	    }
+	  };
+	  enforce domain rdbm table : relational::BaseTable { };
+	  when{
+	    relationship.associativeEntity.oclIsUndefined();
+	    relationship.relationshipLink->size() = 2;
+	    rel_link_left = relationship.relationshipLink->select(x : eer::RelationshipLink | x.isIdentifier = false)->at(1);
+	    rel_link_left <> rel_link_right;
+	    entity_left = rel_link_left.source; 
+	    entity_to_table(entity_left, table_left) or weak_entity_to_table(entity_left, table_left) or
+	    direct_inheritance_to_table(entity_left, table_left) or specialized_inheritance_to_table(entity_left, table_left) or
+	    associative_entity_1_1_to_table(entity_left, table_left) or associative_entity_1_N_to_table(entity_left, table_left) or
+	    associative_entity_N_N_to_table(entity_left, table_left);
+	  }
+	  where{
+	    element_attribute_to_pk(prefix+'_'+entity_left.name+'_', table_name, entity_left , table);
+	    element_attribute_compound_to_pk(prefix+'_'+entity_left.name+'_', table_name, entity_left , table);
+	    weak_entity_to_pk(prefix, table_name, entity_left , table);
+	    direct_inheritance_to_pk(prefix, table_name, entity_left, table);
+	    specialized_inheritance_to_pk(prefix, table_name, entity_left, table);
+	    associative_entity_1_1_to_pk(prefix, table_name, entity_left, table);
+	    associative_entity_1_N_to_pk(prefix, table_name, entity_left, table);
+	    associative_entity_N_N_to_pk(prefix, table_name, entity_left, table);
+	  }
+	}
+	
+	relation weak_entity_to_unique{
+	  rel_link_left : eer::RelationshipLink;
+	  entity_left : eer::EntityType ;
+	  table_left : relational::BaseTable; 
+	  primitive domain prefix: String;
+      primitive domain table_name : String; 
+	  checkonly domain eer weak_entity : eer::Entity {
+	    isWeak = true,
+	    relationshipLink = rel_link_right : eer::RelationshipLink{
+	      isIdentifier = true,
+	      target = relationship : eer::Relationship {
+	      }
+	    }
+	  };
+	  enforce domain rdbm table : relational::BaseTable { };
+	  when{
+	    relationship.associativeEntity.oclIsUndefined();
+	    relationship.relationshipLink->size() = 2;
+	    rel_link_left = relationship.relationshipLink->select(x : eer::RelationshipLink | x.isIdentifier = false)->at(1);
+	    rel_link_left <> rel_link_right;
+	    entity_left = rel_link_left.source; 
+	    entity_to_table(entity_left, table_left) or weak_entity_to_table(entity_left, table_left) or
+	    direct_inheritance_to_table(entity_left, table_left) or specialized_inheritance_to_table(entity_left, table_left) or
+	    associative_entity_1_1_to_table(entity_left, table_left) or associative_entity_1_N_to_table(entity_left, table_left) or
+	    associative_entity_N_N_to_table(entity_left, table_left);
+	  }
+	  where{
+	    element_attribute_to_unique(prefix+'_'+entity_left.name+'_', table_name, entity_left , table);
+        element_attribute_compound_to_unique(prefix+'_'+entity_left.name+'_', table_name, entity_left , table);
+	    weak_entity_to_unique(prefix, table_name, entity_left , table);
+	    direct_inheritance_to_unique(prefix, table_name, entity_left , table);
+	    specialized_inheritance_to_unique(prefix, table_name, entity_left, table);
+	    associative_entity_1_1_to_unique(prefix, table_name, entity_left, table);
+	    associative_entity_1_N_to_unique(prefix, table_name, entity_left, table);
+	    associative_entity_N_N_to_unique(prefix, table_name, entity_left, table);
+	  }
+	}
+	relation weak_entity_to_fk{
+      rel_link_left : eer::RelationshipLink;
+	  entity_left : eer::EntityType ;
+	  table_left : relational::BaseTable; 
+	  primitive domain prefix: String;
+      primitive domain table_name : String;
+      primitive domain is_nullable : String;
+      checkonly domain rdbm table_referenced : relational::BaseTable { }; 
+      checkonly domain eer weak_entity : eer::Entity {
+	    isWeak = true,
+	    relationshipLink = rel_link_right : eer::RelationshipLink{
+	      isIdentifier = true,
+	      target = relationship : eer::Relationship {
+	      }
+	    }
+	  };
+	  enforce domain rdbm table : relational::BaseTable { };
+	  when{
+	    relationship.associativeEntity.oclIsUndefined();
+	    relationship.relationshipLink->size() = 2;
+	    rel_link_left = relationship.relationshipLink->select(x : eer::RelationshipLink | x.isIdentifier = false)->at(1);
+	    rel_link_left <> rel_link_right;
+	    entity_left = rel_link_left.source; 
+	    entity_to_table(entity_left, table_left) or weak_entity_to_table(entity_left, table_left) or
+	    direct_inheritance_to_table(entity_left, table_left) or specialized_inheritance_to_table(entity_left, table_left) or
+	    associative_entity_1_1_to_table(entity_left, table_left) or associative_entity_1_N_to_table(entity_left, table_left) or
+	    associative_entity_N_N_to_table(entity_left, table_left);
+	  }
+	  where{
+	    element_attribute_to_fk_with_table(prefix, table_name, is_nullable, table, entity_left, table_referenced); 
+	    element_attribute_compound_to_fk_with_table(prefix, table_name, is_nullable, table, entity_left, table_referenced); 
+	    weak_entity_to_fk (prefix, table_name, is_nullable, table_referenced, entity_left, table);
+	    direct_inheritance_to_fk(prefix, table_name, is_nullable, table_referenced ,entity_left, table);
+	    specialized_inheritance_to_fk(prefix, table_name, is_nullable, table_referenced ,entity_left, table);
+	    associative_entity_1_1_to_fk(prefix, table_name, is_nullable, table_referenced ,entity_left, table);
+	    associative_entity_1_N_to_fk(prefix, table_name, is_nullable, table_referenced ,entity_left, table);
+	    associative_entity_N_N_to_fk(prefix, table_name, is_nullable, table_referenced ,entity_left, table);
+	  }  
+    }
+    
+    top relation direct_inheritance_to_table {
+      e_name : String;
+	  table_source : relational::BaseTable; 	 
+	  checkonly domain eer entity_target : eer::Entity {
+	    name = e_name,
+	    directInheritanceLinkTarget = direct_inheritance : eer::DirectInheritanceLink{
+	       source = entity_source : eer::Entity{}
+	    }
+	  };
+	  enforce domain rdbm table : relational::BaseTable {
+	    name = e_name
+	  };
+	  when{
+        entity_target.directInheritanceLinkTarget->size()>0;
+        entity_to_table(entity_source, table_source) or weak_entity_to_table(entity_source, table_source) or 
+        direct_inheritance_to_table(entity_source, table_source) or specialized_inheritance_to_table(entity_source, table_source);
+      }
+      where{
+        element_attribute_to_column('', entity_target, table);
+        element_attribute_compound_to_column('', entity_target , table);
+        element_attribute_to_pk('', entity_target.name, entity_target , table);
+        element_attribute_compound_to_pk('', entity_target.name, entity_target , table);
+        element_attribute_to_table(entity_target.name, entity_target.name, entity_target, table, entity_target);
+        element_attribute_compound_to_table(entity_target.name, entity_target.name, entity_target, table, entity_target);
+        
+       /*Set PK entity left as PK of the Weak Entity*/
+	    element_attribute_to_pk(entity_source.name+'_'+entity_target.name+'_', entity_target.name, entity_source , table);
+	    element_attribute_compound_to_pk(entity_source.name+'_'+entity_target.name+'_', entity_target.name, entity_source , table);
+	    
+	    element_attribute_to_fk(entity_source.name+'_'+entity_target.name, entity_source.name, 'false', table, entity_source, table_source); 
+	    element_attribute_compound_to_fk(entity_source.name+'_'+entity_target.name, entity_source.name, 'false', table, entity_source, table_source); 
+	    
+	    weak_entity_to_pk(entity_source.name+'_'+entity_target.name, entity_target.name, entity_source , table);
+	    weak_entity_to_fk(entity_source.name+'_'+entity_target.name, entity_source.name, 'false', table_source , entity_source , table);
+	   
+	    direct_inheritance_to_pk(entity_source.name+'_'+entity_target.name, entity_target.name, entity_source, table);
+	    direct_inheritance_to_fk(entity_source.name+'_'+entity_target.name,  entity_source.name, 'false', table_source ,entity_source, table);
+	   
+	    specialized_inheritance_to_pk(entity_source.name+'_'+entity_target.name, entity_target.name, entity_source, table);
+        specialized_inheritance_to_fk(entity_source.name+'_'+entity_target.name, entity_source.name, 'false',  table_source ,entity_source, table);
+      }
+    }
+    
+    relation direct_inheritance_to_pk {
+      e_name : String;
+	  table_source : relational::BaseTable;
+	  primitive domain prefix: String;
+      primitive domain table_name : String;  	 
+	  checkonly domain eer entity_target : eer::Entity {
+	    name = e_name,
+        schema = schema_EER : eer::Schema{},
+	    directInheritanceLinkTarget = direct_inheritance : eer::DirectInheritanceLink{
+	       source = entity_source : eer::Entity{}
+	    }
+	  };
+	  enforce domain rdbm table : relational::BaseTable {};
+	  when{ 
+        entity_target.directInheritanceLinkTarget->size()>0;
+        entity_to_table(entity_source, table_source) or weak_entity_to_table(entity_source, table_source) or 
+        direct_inheritance_to_table(entity_source, table_source) or specialized_inheritance_to_table(entity_source, table_source);
+      }
+      where{
+        element_attribute_to_pk(prefix+'_', table_name, entity_source , table);
+        element_attribute_compound_to_pk(prefix+'_', table_name, entity_source , table);
+	    weak_entity_to_pk(prefix, table_name, entity_source , table);
+	    direct_inheritance_to_pk(prefix, table_name, entity_source , table);
+	    specialized_inheritance_to_pk(prefix, table_name, entity_source , table);
+      }
+    }
+
+    relation direct_inheritance_to_unique {
+      e_name : String;
+	  table_source : relational::BaseTable;
+	  primitive domain prefix: String;
+      primitive domain table_name : String;  	 
+	  checkonly domain eer entity_target : eer::Entity {
+	    name = e_name,
+        schema = schema_EER : eer::Schema{},
+	    directInheritanceLinkTarget = direct_inheritance : eer::DirectInheritanceLink{
+	       source = entity_source : eer::Entity{}
+	    }
+	  };
+	  enforce domain rdbm table : relational::BaseTable {};
+	  when{ 
+        entity_target.directInheritanceLinkTarget->size()>0;
+        entity_to_table(entity_source, table_source) or weak_entity_to_table(entity_source, table_source) or 
+        direct_inheritance_to_table(entity_source, table_source) or specialized_inheritance_to_table(entity_source, table_source);
+      }
+      where{
+        element_attribute_to_unique(prefix+'_', table_name, entity_source , table);
+        element_attribute_compound_to_unique(prefix+'_', table_name, entity_source , table);
+	    weak_entity_to_unique(prefix, table_name, entity_source , table);
+	    direct_inheritance_to_unique(prefix, table_name, entity_source , table);
+	    specialized_inheritance_to_unique(prefix, table_name, entity_source , table);
+      }
+    }    
+   relation direct_inheritance_to_fk {
+      e_name : String;
+	  table_source : relational::BaseTable;
+	  primitive domain prefix: String;
+      primitive domain table_name : String;
+      primitive domain is_nullable : String;
+      checkonly domain rdbm table_referenced : relational::BaseTable {};   	 
+	  checkonly domain eer entity_target : eer::Entity {
+	    name = e_name,
+        schema = schema_EER : eer::Schema{},
+	    directInheritanceLinkTarget = direct_inheritance : eer::DirectInheritanceLink{
+	       source = entity_source : eer::Entity{}
+	    }
+	  };
+	  enforce domain rdbm table : relational::BaseTable {};
+	  when{ 
+        entity_target.directInheritanceLinkTarget->size()>0;
+        entity_to_table(entity_source, table_source) or weak_entity_to_table(entity_source, table_source) or 
+        direct_inheritance_to_table(entity_source, table_source) or specialized_inheritance_to_table(entity_source, table_source);
+      }
+      where{
+        (element_attribute_to_fk(prefix, table_name, is_nullable,table, entity_source, table_referenced) or
+        element_attribute_compound_to_fk(prefix, table_name, is_nullable,table, entity_source, table_referenced) or
+	    weak_entity_to_fk(prefix, table_name, is_nullable, table_referenced , entity_source , table) or
+	    direct_inheritance_to_fk(prefix, table_name, is_nullable, table_referenced , entity_source , table) or 
+	    specialized_inheritance_to_fk(prefix, table_name, is_nullable, table_referenced , entity_source , table) or true);
+	    
+      }   
+    }
+    
+    top relation specialized_inheritance_to_table{
+      e_name : String;
+	  table_source : relational::BaseTable; 	 
+	  checkonly domain eer entity_target : eer::Entity {
+	    name = e_name,
+	    inheritanceSL = inheritance_SL : eer::InheritanceSL{
+	      target = inheritance : eer::Inheritance {
+	        inheritanceGL = inheritance_GL : eer::InheritanceGL{
+	          source = entity_source : eer::Entity{}
+	        }
+	      }
+	    }
+	  };
+	  enforce domain rdbm table : relational::BaseTable {
+	    name = e_name
+	  };
+      when{
+        entity_target.inheritanceSL->size()>0;
+        entity_to_table(entity_source, table_source) or weak_entity_to_table(entity_source, table_source) or 
+        direct_inheritance_to_table(entity_source, table_source) or specialized_inheritance_to_table(entity_source, table_source);
+      }
+      where{
+        element_attribute_to_column('', entity_target, table);
+        element_attribute_compound_to_column('', entity_target , table);
+        element_attribute_to_pk('', entity_target.name, entity_target , table);
+        element_attribute_compound_to_pk('', entity_target.name, entity_target , table);
+        element_attribute_to_table(entity_target.name, entity_target.name, entity_target, table, entity_target);
+        element_attribute_compound_to_table(entity_target.name, entity_target.name, entity_target, table, entity_target);
+        
+	    element_attribute_to_pk(entity_source.name+'_'+entity_target.name+'_', entity_target.name, entity_source , table);
+	    element_attribute_compound_to_pk(entity_source.name+'_'+entity_target.name+'_', entity_target.name, entity_source , table);
+	    element_attribute_to_fk(entity_source.name+'_'+entity_target.name, entity_source.name, 'false', table, entity_source, table_source); 
+	    element_attribute_compound_to_fk(entity_source.name+'_'+entity_target.name, entity_source.name, 'false', table, entity_source, table_source); 
+	    weak_entity_to_pk(entity_source.name+'_'+entity_target.name, entity_target.name, entity_source , table);
+	    weak_entity_to_fk(entity_source.name+'_'+entity_target.name, entity_source.name, 'false', table_source , entity_source , table);
+	    direct_inheritance_to_pk(entity_source.name+'_'+entity_target.name, entity_target.name, entity_source, table);
+	    direct_inheritance_to_fk(entity_source.name+'_'+entity_target.name, entity_source.name, 'false', table_source ,entity_source, table);
+        specialized_inheritance_to_pk(entity_source.name+'_'+entity_target.name, entity_target.name, entity_source, table);
+        specialized_inheritance_to_fk(entity_source.name+'_'+entity_target.name, entity_source.name, 'false', table_source ,entity_source, table);
+	  
+	  	if inheritance.disjointness = eer::DisjointnessType::DISJOINT then
+	  	  if inheritance_GL.completeness = eer::CompletenessType::TOTAL then
+	  	  	trigger_inheritance_insert(entity_target.name, entity_source.name, entity_source, table_source) or true
+	  	  else
+	  	  	//trigger_inheritance_insert(entity_source.name, entity_source.name, entity_target, table) or true
+	  	  	true
+	  	  endif
+	  	else
+	  	  if inheritance_GL.completeness = eer::CompletenessType::TOTAL then
+	  	    trigger_inheritance_overl_total(entity_target.name, entity_source.name, entity_source, table_source) or true
+	  	  else
+	  	    true
+	  	  endif
+	  	endif;  
+	  	
+      }
+    }
+  
+  top relation specialized_inheritance_to_table_set_TR{
+      e_name : String;
+	  table_source : relational::BaseTable; 	
+	  table_source2 : relational::BaseTable;  
+	  checkonly domain eer entity_target : eer::Entity {
+	    name = e_name,
+	    inheritanceSL = inheritance_SL : eer::InheritanceSL{
+	      target = inheritance : eer::Inheritance {
+	        inheritanceGL = inheritance_GL : eer::InheritanceGL{
+	          source = entity_source : eer::Entity{}
+	        },
+	        inheritanceSL = inheritance_SL2 : eer::InheritanceSL{
+	          source = entity_source2 : eer::Entity{}
+	        }
+	      }
+	    }
+	  };
+	  enforce domain rdbm table : relational::BaseTable {
+	    name = e_name
+	  };
+
+	  when{
+	    inheritance_SL <> inheritance_SL2;
+		entity_target.inheritanceSL->size()>0;
+        entity_to_table(entity_source, table_source) or weak_entity_to_table(entity_source, table_source) or 
+        direct_inheritance_to_table(entity_source, table_source) or specialized_inheritance_to_table(entity_source, table_source);
+        
+        entity_to_table(entity_source2, table_source2) or weak_entity_to_table(entity_source2, table_source2) or 
+        direct_inheritance_to_table(entity_source2, table_source2) or specialized_inheritance_to_table(entity_source2, table_source2);
+        
+        entity_to_table(entity_target, table) or weak_entity_to_table(entity_target, table) or 
+        direct_inheritance_to_table(entity_target, table) or specialized_inheritance_to_table(entity_target, table);
+	  }
+      where{
+	  	if inheritance.disjointness = eer::DisjointnessType::DISJOINT then
+	  	 if inheritance_GL.completeness = eer::CompletenessType::TOTAL then
+	  	   trigger_inheritance_insert_delete_2(entity_source2.name, entity_source.name, entity_target, table) or true
+	  	 else
+	  	   trigger_inheritance_insert_delete(entity_source2.name, entity_source.name, entity_target, table) or true
+	  	 endif  	
+	  	else
+	  	  if inheritance_GL.completeness = eer::CompletenessType::TOTAL then
+			trigger_inheritance_over_insert_delete(entity_source2.name, entity_source.name, entity_target, table) or true
+	  	  else
+	  	    true
+	  	  endif
+	  	endif;  
+	  	
+      }
+    }
+  
+    relation specialized_inheritance_to_pk{
+      e_name : String;
+	  table_source : relational::BaseTable;
+	  primitive domain prefix: String;
+      primitive domain table_name : String;   	 
+	  checkonly domain eer entity_target : eer::Entity {
+	    name = e_name,
+	    inheritanceSL = inheritance_SL : eer::InheritanceSL{
+	      target = inheritance : eer::Inheritance {
+	        inheritanceGL = inheritance_GL : eer::InheritanceGL{
+	          source = entity_source : eer::Entity{}
+	        }
+	      }
+	    }
+	  };
+	  enforce domain rdbm table : relational::BaseTable {};
+      when{
+        entity_target.inheritanceSL->size()>0;
+        entity_to_table(entity_source, table_source) or weak_entity_to_table(entity_source, table_source) or 
+        direct_inheritance_to_table(entity_source, table_source) or specialized_inheritance_to_table(entity_source, table_source);
+      }
+      where{
+        element_attribute_to_pk(prefix+'_', table_name, entity_source , table);
+        element_attribute_compound_to_pk(prefix+'_', table_name, entity_source , table);
+	    weak_entity_to_pk(prefix, table_name, entity_source , table);
+	    direct_inheritance_to_pk(prefix, table_name, entity_source , table);
+	    specialized_inheritance_to_pk(prefix, table_name, entity_source , table);
+      }
+    }
+  
+    relation specialized_inheritance_to_unique{
+      e_name : String;
+	  table_source : relational::BaseTable;
+	  primitive domain prefix: String;
+      primitive domain table_name : String;   	 
+	  checkonly domain eer entity_target : eer::Entity {
+	    name = e_name,
+	    inheritanceSL = inheritance_SL : eer::InheritanceSL{
+	      target = inheritance : eer::Inheritance {
+	        inheritanceGL = inheritance_GL : eer::InheritanceGL{
+	          source = entity_source : eer::Entity{}
+	        }
+	      }
+	    }
+	  };
+	  enforce domain rdbm table : relational::BaseTable {};
+      when{
+        entity_target.inheritanceSL->size()>0;
+        entity_to_table(entity_source, table_source) or weak_entity_to_table(entity_source, table_source) or 
+        direct_inheritance_to_table(entity_source, table_source) or specialized_inheritance_to_table(entity_source, table_source);
+      }
+      where{
+        element_attribute_to_unique(prefix+'_', table_name, entity_source , table);
+        element_attribute_compound_to_unique(prefix+'_', table_name, entity_source , table);
+	    weak_entity_to_unique(prefix, table_name, entity_source , table);
+	    direct_inheritance_to_unique(prefix, table_name, entity_source , table);
+	    specialized_inheritance_to_unique(prefix, table_name, entity_source , table);
+      }
+    }
+    
+    relation specialized_inheritance_to_fk{
+      e_name : String;
+	  table_source : relational::BaseTable;
+	  primitive domain prefix: String;
+      primitive domain table_name : String; 
+      primitive domain is_nullable : String;
+      checkonly domain rdbm table_referenced : relational::BaseTable {};  	 
+	  checkonly domain eer entity_target : eer::Entity {
+	    name = e_name,
+	    inheritanceSL = inheritance_SL : eer::InheritanceSL{
+	      target = inheritance : eer::Inheritance {
+	        inheritanceGL = inheritance_GL : eer::InheritanceGL{
+	          source = entity_source : eer::Entity{}
+	        }
+	      }
+	    }
+	  };
+	  enforce domain rdbm table : relational::BaseTable {};
+      when{
+        entity_target.inheritanceSL->size()>0;
+        entity_to_table(entity_source, table_source) or weak_entity_to_table(entity_source, table_source) or 
+        direct_inheritance_to_table(entity_source, table_source) or specialized_inheritance_to_table(entity_source, table_source);
+      }
+      where{
+        (element_attribute_to_fk(prefix, table_name, is_nullable,table, entity_source, table_referenced) or
+        element_attribute_compound_to_fk(prefix, table_name, is_nullable,table, entity_source, table_referenced) or
+	    weak_entity_to_fk(prefix, table_name, is_nullable, table_referenced , entity_source , table) or
+	    direct_inheritance_to_fk(prefix, table_name, is_nullable, table_referenced , entity_source , table) or 
+	    specialized_inheritance_to_fk(prefix, table_name, is_nullable, table_referenced , entity_source , table) or true);
+      }
+    }
+
+
+    top relation associative_entity_1_1_to_table{
+      rel_link_left : eer::RelationshipLink;
+      rel_link_right : eer::RelationshipLink; 
+      entity_left : eer::EntityType;
+      entity_right : eer::EntityType;
+      table_left : relational::BaseTable; 
+	  table_right : relational::BaseTable;
+	  checkonly domain eer associative_entity : eer::AssociativeEntity {
+	    contains = relationship : eer::Relationship {
+	    }
+	  };
+	  enforce domain rdbm table: relational::BaseTable {
+	    name = associative_entity.name	
+	  };
+      when{
+        relationship.relationshipLink->size()= 2;
+        relationship.relationshipLink->select(x : eer::RelationshipLink | x.cardinality = eer::CardinalityType::ONE)->size()=2;
+        rel_link_left = relationship.relationshipLink->select(x: eer::RelationshipLink | 
+        (x.attributeToHere = true and x.participation = eer::CompletenessType::TOTAL) or 
+        (x.attributeToHere = true and x.participation = eer::CompletenessType::PARTIAL) or 
+        (x.attributeToHere = false and x.participation = eer::CompletenessType::TOTAL))->at(1);
+        rel_link_right = relationship.relationshipLink->select(x: eer::RelationshipLink | x <> rel_link_left )->at(1);
+        rel_link_left <> rel_link_right;
+        entity_left = rel_link_left.source;
+	    entity_right = rel_link_right.source;
+	    entity_to_table(entity_left, table_left) or weak_entity_to_table(entity_left, table_left) or 
+        direct_inheritance_to_table(entity_left, table_left) or specialized_inheritance_to_table(entity_left, table_left) or
+        associative_entity_1_1_to_table(entity_left, table_left) or associative_entity_1_N_to_table(entity_left, table_left) or 
+        associative_entity_N_N_to_table(entity_left, table_left);
+	    entity_to_table(entity_right, table_right) or weak_entity_to_table(entity_right, table_right) or 
+        direct_inheritance_to_table(entity_right, table_right) or specialized_inheritance_to_table(entity_right, table_right) or
+        associative_entity_1_1_to_table(entity_right, table_right) or associative_entity_1_N_to_table(entity_right, table_right) or
+        associative_entity_N_N_to_table(entity_right, table_right);    
+      }
+      where{
+        element_attribute_to_column('', relationship, table);
+        element_attribute_compound_to_column('', relationship , table);
+        element_attribute_to_table(associative_entity.name, associative_entity.name, relationship, table, associative_entity);
+        element_attribute_compound_to_table(associative_entity.name, associative_entity.name, relationship, table, associative_entity);
+        
+        //LEFT
+        element_attribute_to_pk(relationship.name+'_'+entity_left.name+'_', associative_entity.name, entity_left, table);
+	    element_attribute_to_fk(relationship.name+'_'+entity_left.name, entity_left.name, 'false', table, entity_left, table_left); 
+	    element_attribute_compound_to_pk(relationship.name+'_'+entity_left.name+'_', associative_entity.name, entity_left, table);
+	    element_attribute_compound_to_fk(relationship.name+'_'+entity_left.name, entity_left.name, 'false', table, entity_left, table_left); 
+	    direct_inheritance_to_pk(relationship.name+'_'+entity_left.name, associative_entity.name, entity_left, table);
+	    direct_inheritance_to_fk(relationship.name+'_'+entity_left.name, entity_left.name, 'false', table_left, entity_left, table); 
+	    weak_entity_to_pk(relationship.name+'_'+entity_left.name, associative_entity.name, entity_left, table);
+	    weak_entity_to_fk(relationship.name+'_'+entity_left.name, entity_left.name, 'false', table_left, entity_left, table); 
+	    specialized_inheritance_to_pk(relationship.name+'_'+entity_left.name, associative_entity.name, entity_left, table);
+	    specialized_inheritance_to_fk(relationship.name+'_'+entity_left.name, entity_left.name, 'false', table_left, entity_left, table);
+	    associative_entity_1_1_to_pk(relationship.name+'_'+entity_left.name, associative_entity.name, entity_left, table);
+	    associative_entity_1_1_to_fk(relationship.name+'_'+entity_left.name, entity_left.name, 'false', table_left, entity_left, table);
+	    associative_entity_1_N_to_pk(relationship.name+'_'+entity_left.name, associative_entity.name, entity_left, table);
+	    associative_entity_1_N_to_fk(relationship.name+'_'+entity_left.name, entity_left.name, 'false', table_left, entity_left, table);
+	    associative_entity_N_N_to_pk(relationship.name+'_'+entity_left.name, associative_entity.name, entity_left, table);
+	    associative_entity_N_N_to_fk(relationship.name+'_'+entity_left.name, entity_left.name, 'false', table_left, entity_left, table);
+	    
+	    //RIGHT
+	    element_attribute_to_unique(relationship.name+'_'+entity_right.name+'_', relationship.name+'_'+entity_right.name, entity_right, table);
+	    element_attribute_to_fk(relationship.name+'_'+entity_right.name, entity_right.name, 'false', table, entity_right, table_right); 
+	    element_attribute_compound_to_unique(relationship.name+'_'+entity_right.name+'_', relationship.name+'_'+entity_right.name, entity_right, table);
+	    element_attribute_compound_to_fk(relationship.name+'_'+entity_right.name, entity_right.name, 'false', table, entity_right, table_right);
+	    direct_inheritance_to_unique(relationship.name+'_'+entity_right.name+'_', entity_right.name, entity_right, table);
+	    direct_inheritance_to_fk(relationship.name+'_'+entity_right.name, entity_right.name, 'false', table_right, entity_right, table); 
+	    weak_entity_to_unique(relationship.name+'_'+entity_right.name+'_', relationship.name+'_'+entity_right.name, entity_right, table);
+	    weak_entity_to_fk(relationship.name+'_'+entity_right.name, entity_right.name, 'false', table_right, entity_right, table); 
+	    specialized_inheritance_to_unique(relationship.name+'_'+entity_right.name+'_', relationship.name+'_'+entity_right.name, entity_right, table);
+	    specialized_inheritance_to_fk(relationship.name+'_'+entity_right.name, entity_right.name, 'false', table_right, entity_right, table);
+	    associative_entity_1_1_to_unique(relationship.name+'_'+entity_right.name+'_', relationship.name+'_'+entity_right.name, entity_right, table);
+	    associative_entity_1_1_to_fk(relationship.name+'_'+entity_right.name, entity_right.name, 'false', table_right, entity_right, table);
+	    associative_entity_1_N_to_unique(relationship.name+'_'+entity_right.name+'_', relationship.name+'_'+entity_right.name, entity_right, table);
+	    associative_entity_1_N_to_fk(relationship.name+'_'+entity_right.name, entity_right.name, 'false', table_right, entity_right, table);
+	    associative_entity_N_N_to_unique(relationship.name+'_'+entity_right.name+'_', relationship.name+'_'+entity_right.name, entity_right, table);
+	    associative_entity_N_N_to_fk(relationship.name+'_'+entity_right.name, entity_right.name, 'false', table_right, entity_right, table);
+	    
+	    if rel_link_left.participation = eer::CompletenessType::TOTAL then
+	       trigger_insert(associative_entity.name, relationship.name, entity_left, table_left) or 
+	       trigger_update_or_delete(entity_left.name, relationship.name, associative_entity, table) or true
+	    else
+	      true
+	    endif;  
+	    if rel_link_right.participation = eer::CompletenessType::TOTAL then
+	       trigger_insert(associative_entity.name, relationship.name, entity_right, table_right) or
+	       trigger_update_or_delete(entity_right.name, relationship.name, associative_entity, table) or true
+	    else
+	      true
+	    endif;
+      }
+    }
+    
+    relation associative_entity_1_1_to_pk{
+      rel_link_left : eer::RelationshipLink;
+      rel_link_right : eer::RelationshipLink; 
+      entity_left : eer::EntityType;
+      entity_right : eer::EntityType;
+      table_left : relational::BaseTable; 
+	  table_right : relational::BaseTable;
+	  primitive domain prefix: String;
+      primitive domain table_name : String; 
+	  checkonly domain eer associative_entity : eer::AssociativeEntity {
+	    contains = relationship : eer::Relationship {
+	    }
+	  };
+	  enforce domain rdbm table: relational::BaseTable {
+	  };
+      when{
+        relationship.relationshipLink->size()= 2;
+        relationship.relationshipLink->select(x : eer::RelationshipLink | x.cardinality = eer::CardinalityType::ONE)->size()=2;
+         rel_link_left = relationship.relationshipLink->select(x: eer::RelationshipLink | 
+        (x.attributeToHere = true and x.participation = eer::CompletenessType::TOTAL) or 
+        (x.attributeToHere = true and x.participation = eer::CompletenessType::PARTIAL) or 
+        (x.attributeToHere = false and x.participation = eer::CompletenessType::TOTAL))->at(1);
+        rel_link_right = relationship.relationshipLink->select(x: eer::RelationshipLink | x <> rel_link_left )->at(1);
+        rel_link_left <> rel_link_right;
+        entity_left = rel_link_left.source;
+	    entity_right = rel_link_right.source;
+	    entity_to_table(entity_left, table_left) or weak_entity_to_table(entity_left, table_left) or 
+        direct_inheritance_to_table(entity_left, table_left) or specialized_inheritance_to_table(entity_left, table_left) or
+        associative_entity_1_1_to_table(entity_left, table_left) or associative_entity_1_N_to_table(entity_left, table_left) or
+        associative_entity_N_N_to_table(entity_left, table_left);
+	    entity_to_table(entity_right, table_right) or weak_entity_to_table(entity_right, table_right) or 
+        direct_inheritance_to_table(entity_right, table_right) or specialized_inheritance_to_table(entity_right, table_right) or
+        associative_entity_1_1_to_table(entity_right, table_right) or associative_entity_1_N_to_table(entity_right, table_right) or
+        associative_entity_N_N_to_table(entity_right, table_right);    
+      }
+      where{
+        //LEFT
+        element_attribute_to_pk(prefix+'_', table_name, entity_left, table);
+	    element_attribute_compound_to_pk(prefix+'_', table_name, entity_left, table);
+	    direct_inheritance_to_pk(prefix, table_name, entity_left, table);
+	    weak_entity_to_pk(prefix, table_name, entity_left, table);
+	    specialized_inheritance_to_pk(prefix, table_name, entity_left, table);
+	    associative_entity_1_1_to_pk(prefix, table_name, entity_left, table);
+	    associative_entity_1_N_to_pk(prefix, table_name, entity_left, table);
+	    associative_entity_N_N_to_pk(prefix, table_name, entity_left, table);
+      }
+    }
+    
+    relation associative_entity_1_1_to_unique{
+      rel_link_left : eer::RelationshipLink;
+      rel_link_right : eer::RelationshipLink; 
+      entity_left : eer::EntityType;
+      entity_right : eer::EntityType;
+      table_left : relational::BaseTable; 
+	  table_right : relational::BaseTable;
+	  primitive domain prefix: String;
+      primitive domain table_name : String; 
+	  checkonly domain eer associative_entity : eer::AssociativeEntity {
+	    contains = relationship : eer::Relationship {
+	    }
+	  };
+	  enforce domain rdbm table: relational::BaseTable {
+	  };
+      when{
+        relationship.relationshipLink->size()= 2;
+        relationship.relationshipLink->select(x : eer::RelationshipLink | x.cardinality = eer::CardinalityType::ONE)->size()=2;
+         rel_link_left = relationship.relationshipLink->select(x: eer::RelationshipLink | 
+        (x.attributeToHere = true and x.participation = eer::CompletenessType::TOTAL) or 
+        (x.attributeToHere = true and x.participation = eer::CompletenessType::PARTIAL) or 
+        (x.attributeToHere = false and x.participation = eer::CompletenessType::TOTAL) )->at(1);
+        rel_link_right = relationship.relationshipLink->select(x: eer::RelationshipLink | x <> rel_link_left )->at(1);
+        rel_link_left <> rel_link_right;
+        entity_left = rel_link_left.source;
+	    entity_right = rel_link_right.source;
+	    entity_to_table(entity_left, table_left) or weak_entity_to_table(entity_left, table_left) or 
+        direct_inheritance_to_table(entity_left, table_left) or specialized_inheritance_to_table(entity_left, table_left) or
+        associative_entity_1_1_to_table(entity_left, table_left) or associative_entity_1_N_to_table(entity_left, table_left) or 
+        associative_entity_N_N_to_table(entity_left, table_left);
+	    entity_to_table(entity_right, table_right) or weak_entity_to_table(entity_right, table_right) or 
+        direct_inheritance_to_table(entity_right, table_right) or specialized_inheritance_to_table(entity_right, table_right) or
+        associative_entity_1_1_to_table(entity_right, table_right) or associative_entity_1_N_to_table(entity_right, table_right) or
+        associative_entity_N_N_to_table(entity_right, table_right);    
+      }
+      where{
+        //LEFT
+        element_attribute_to_unique(prefix, table_name, entity_left, table);
+	    element_attribute_compound_to_unique(prefix, table_name, entity_left, table);
+	    direct_inheritance_to_unique(prefix, table_name, entity_left, table);
+	    weak_entity_to_unique(prefix, table_name, entity_left, table);
+	    specialized_inheritance_to_unique(prefix, table_name, entity_left, table);
+	    associative_entity_1_1_to_unique(prefix, table_name, entity_left, table);
+	    associative_entity_1_N_to_unique(prefix, table_name, entity_left, table);
+	    associative_entity_N_N_to_unique(prefix, table_name, entity_left, table);
+      }
+    }
+    
+    relation associative_entity_1_1_to_fk{
+      rel_link_left : eer::RelationshipLink;
+      rel_link_right : eer::RelationshipLink; 
+      entity_left : eer::EntityType;
+      entity_right : eer::EntityType;
+      table_left : relational::BaseTable; 
+	  table_right : relational::BaseTable;
+	  primitive domain prefix: String;
+      primitive domain table_name : String;
+      primitive domain is_nullable : String;
+      checkonly domain rdbm table_referenced : relational::BaseTable {};
+	  checkonly domain eer associative_entity : eer::AssociativeEntity {
+	    contains = relationship : eer::Relationship {
+	    }
+	  };
+	  enforce domain rdbm table: relational::BaseTable {
+	  };
+      when{
+        relationship.relationshipLink->size()= 2;
+        relationship.relationshipLink->select(x : eer::RelationshipLink | x.cardinality = eer::CardinalityType::ONE)->size()=2;
+         rel_link_left = relationship.relationshipLink->select(x: eer::RelationshipLink | 
+        (x.attributeToHere = true and x.participation = eer::CompletenessType::TOTAL) or 
+        (x.attributeToHere = true and x.participation = eer::CompletenessType::PARTIAL) or 
+        (x.attributeToHere = false and x.participation = eer::CompletenessType::TOTAL))->at(1);
+        rel_link_right = relationship.relationshipLink->select(x: eer::RelationshipLink | x <> rel_link_left )->at(1);
+        rel_link_left <> rel_link_right;
+        entity_left = rel_link_left.source;
+	    entity_right = rel_link_right.source;
+	    entity_to_table(entity_left, table_left) or weak_entity_to_table(entity_left, table_left) or 
+        direct_inheritance_to_table(entity_left, table_left) or specialized_inheritance_to_table(entity_left, table_left) or
+        associative_entity_1_1_to_table(entity_left, table_left) or associative_entity_1_N_to_table(entity_left, table_left) or
+        associative_entity_N_N_to_table(entity_left, table_left);
+	    entity_to_table(entity_right, table_right) or weak_entity_to_table(entity_right, table_right) or 
+        direct_inheritance_to_table(entity_right, table_right) or specialized_inheritance_to_table(entity_right, table_right) or
+        associative_entity_1_1_to_table(entity_right, table_right) or associative_entity_1_N_to_table(entity_right, table_right) or
+        associative_entity_N_N_to_table(entity_right, table_right);    
+      }
+      where{
+        //LEFT
+        (element_attribute_to_fk(prefix, table_name, is_nullable,table, entity_left, table_referenced) or
+        element_attribute_compound_to_fk(prefix, table_name, is_nullable,table, entity_left, table_referenced) or
+	    weak_entity_to_fk(prefix, table_name, is_nullable, table_referenced , entity_left , table) or
+	    direct_inheritance_to_fk(prefix, table_name, is_nullable, table_referenced , entity_left , table) or 
+	    specialized_inheritance_to_fk(prefix, table_name, is_nullable, table_referenced , entity_left , table) or 
+	    associative_entity_1_1_to_fk(prefix, table_name, is_nullable, table_referenced , entity_left , table) or
+	    associative_entity_1_N_to_fk(prefix, table_name, is_nullable, table_referenced , entity_left , table) or 
+	    associative_entity_N_N_to_fk(prefix, table_name, is_nullable, table_referenced , entity_left , table) or true);  
+      }
+    }
+    
+    top relation associative_entity_1_N_to_table{
+      rel_link_left : eer::RelationshipLink;
+      rel_link_right : eer::RelationshipLink; 
+      entity_left : eer::EntityType;
+      entity_right : eer::EntityType;
+      table_left : relational::BaseTable; 
+	  table_right : relational::BaseTable;
+	  checkonly domain eer associative_entity : eer::AssociativeEntity {
+	    contains = relationship : eer::Relationship {
+	    }
+	  };
+	  enforce domain rdbm table: relational::BaseTable {
+	    name = associative_entity.name	
+	  };
+      when{
+        relationship.relationshipLink->size()= 2;
+        relationship.relationshipLink->select(x : eer::RelationshipLink | x.cardinality = eer::CardinalityType::ONE)->size()=1;
+        rel_link_left = relationship.relationshipLink->select(x: eer::RelationshipLink | x.cardinality = eer::CardinalityType::ONE )->at(1);
+        rel_link_right = relationship.relationshipLink->select(x: eer::RelationshipLink | x.cardinality = eer::CardinalityType::MANY)->at(1);
+        rel_link_left <> rel_link_right;
+        entity_left = rel_link_left.source;
+	    entity_right = rel_link_right.source;
+	    entity_to_table(entity_left, table_left) or weak_entity_to_table(entity_left, table_left) or 
+        direct_inheritance_to_table(entity_left, table_left) or specialized_inheritance_to_table(entity_left, table_left) or
+        associative_entity_1_1_to_table(entity_left, table_left) or associative_entity_1_N_to_table(entity_left, table_left) or
+        associative_entity_N_N_to_table(entity_left, table_left);
+	    entity_to_table(entity_right, table_right) or weak_entity_to_table(entity_right, table_right) or 
+        direct_inheritance_to_table(entity_right, table_right) or specialized_inheritance_to_table(entity_right, table_right) or
+        associative_entity_1_1_to_table(entity_right, table_right) or associative_entity_1_N_to_table(entity_right, table_right) or
+        associative_entity_N_N_to_table(entity_right, table_right);    
+      }
+      where{
+        element_attribute_to_column('', relationship, table);
+        element_attribute_compound_to_column('', relationship , table);
+        element_attribute_to_table(associative_entity.name, associative_entity.name, relationship, table, associative_entity);
+        element_attribute_compound_to_table(associative_entity.name, associative_entity.name, relationship, table, associative_entity);
+        
+        //LEFT
+        element_attribute_to_fk(relationship.name+'_'+entity_left.name, entity_left.name, 'false', table, entity_left, table_left); 
+	    element_attribute_compound_to_fk(relationship.name+'_'+entity_left.name, entity_left.name, 'false', table, entity_left, table_left); 
+	    direct_inheritance_to_fk(relationship.name+'_'+entity_left.name, entity_left.name, 'false', table_left, entity_left, table); 
+	    weak_entity_to_fk(relationship.name+'_'+entity_left.name, entity_left.name, 'false', table_left, entity_left, table); 
+	    specialized_inheritance_to_fk(relationship.name+'_'+entity_left.name, entity_left.name, 'false', table_left, entity_left, table);
+	    associative_entity_1_1_to_fk(relationship.name+'_'+entity_left.name, entity_left.name, 'false', table_left, entity_left, table);
+	    associative_entity_1_N_to_fk(relationship.name+'_'+entity_left.name, entity_left.name, 'false', table_left, entity_left, table);
+	    associative_entity_N_N_to_fk(relationship.name+'_'+entity_left.name, entity_left.name, 'false', table_left, entity_left, table);
+	    //RIGHT
+	    element_attribute_to_pk(relationship.name+'_'+entity_right.name+'_', associative_entity.name, entity_right, table);
+	    element_attribute_to_fk(relationship.name+'_'+entity_right.name, entity_right.name, 'false', table, entity_right, table_right); 
+	    element_attribute_compound_to_pk(relationship.name+'_'+entity_right.name+'_', associative_entity.name, entity_right, table);
+	    element_attribute_compound_to_fk(relationship.name+'_'+entity_right.name, entity_right.name, 'false', table, entity_right, table_right);
+	    direct_inheritance_to_pk(relationship.name+'_'+entity_right.name, associative_entity.name, entity_right, table);
+	    direct_inheritance_to_fk(relationship.name+'_'+entity_right.name, entity_right.name, 'false', table_right, entity_right, table); 
+	    weak_entity_to_pk(relationship.name+'_'+entity_right.name, associative_entity.name, entity_right, table);
+	    weak_entity_to_fk(relationship.name+'_'+entity_right.name, entity_right.name, 'false', table_right, entity_right, table); 
+	    specialized_inheritance_to_pk(relationship.name+'_'+entity_right.name, associative_entity.name, entity_right, table);
+	    specialized_inheritance_to_fk(relationship.name+'_'+entity_right.name, entity_right.name, 'false', table_right, entity_right, table);
+	    associative_entity_1_1_to_pk(relationship.name+'_'+entity_right.name, associative_entity.name, entity_right, table);
+	    associative_entity_1_1_to_fk(relationship.name+'_'+entity_right.name, entity_right.name, 'false', table_right, entity_right, table);
+	    associative_entity_1_N_to_pk(relationship.name+'_'+entity_right.name, associative_entity.name, entity_right, table);
+	    associative_entity_1_N_to_fk(relationship.name+'_'+entity_right.name, entity_right.name, 'false', table_right, entity_right, table);
+	    associative_entity_N_N_to_pk(relationship.name+'_'+entity_right.name, associative_entity.name, entity_right, table);
+	    associative_entity_N_N_to_fk(relationship.name+'_'+entity_right.name, entity_right.name, 'false', table_right, entity_right, table);
+	    
+	    if rel_link_left.participation = eer::CompletenessType::TOTAL then
+	       trigger_insert(associative_entity.name, relationship.name, entity_left, table_left) or 
+	       trigger_update_or_delete(entity_left.name, relationship.name, associative_entity, table) or true
+	    else
+	      true
+	    endif;  
+	    if rel_link_right.participation = eer::CompletenessType::TOTAL then
+	       trigger_insert(associative_entity.name, relationship.name, entity_right, table_right) or
+	       trigger_update_or_delete(entity_right.name, relationship.name, associative_entity, table) or true
+	    else
+	      true
+	    endif;
+      }
+    }
+    
+    relation associative_entity_1_N_to_pk{
+      rel_link_left : eer::RelationshipLink;
+      rel_link_right : eer::RelationshipLink; 
+      entity_left : eer::EntityType;
+      entity_right : eer::EntityType;
+      table_left : relational::BaseTable; 
+	  table_right : relational::BaseTable;
+	  primitive domain prefix: String;
+      primitive domain table_name : String; 
+	  checkonly domain eer associative_entity : eer::AssociativeEntity {
+	    contains = relationship : eer::Relationship {
+	    }
+	  };
+	  enforce domain rdbm table: relational::BaseTable {
+	  };
+      when{
+  		relationship.relationshipLink->size()= 2;
+        relationship.relationshipLink->select(x : eer::RelationshipLink | x.cardinality = eer::CardinalityType::ONE)->size()=1;
+        rel_link_left = relationship.relationshipLink->select(x: eer::RelationshipLink | x.cardinality = eer::CardinalityType::ONE )->at(1);
+        rel_link_right = relationship.relationshipLink->select(x: eer::RelationshipLink | x.cardinality = eer::CardinalityType::MANY)->at(1);
+        rel_link_left <> rel_link_right;
+        entity_left = rel_link_left.source;
+	    entity_right = rel_link_right.source;
+	    entity_to_table(entity_left, table_left) or weak_entity_to_table(entity_left, table_left) or 
+        direct_inheritance_to_table(entity_left, table_left) or specialized_inheritance_to_table(entity_left, table_left) or
+        associative_entity_1_1_to_table(entity_left, table_left) or associative_entity_1_N_to_table(entity_left, table_left) or 
+        associative_entity_N_N_to_table(entity_left, table_left);
+	    entity_to_table(entity_right, table_right) or weak_entity_to_table(entity_right, table_right) or 
+        direct_inheritance_to_table(entity_right, table_right) or specialized_inheritance_to_table(entity_right, table_right) or
+        associative_entity_1_1_to_table(entity_right, table_right) or associative_entity_1_N_to_table(entity_right, table_right) or
+        associative_entity_N_N_to_table(entity_right, table_right);    
+      }
+      where{
+	    //RIGHT
+	    element_attribute_to_pk(prefix+'_', table_name, entity_right, table);
+	    element_attribute_compound_to_pk(prefix+'_', table_name, entity_right, table);
+	    direct_inheritance_to_pk(prefix, table_name, entity_right, table);
+	    weak_entity_to_pk(prefix, table_name, entity_right, table);
+	    specialized_inheritance_to_pk(prefix, table_name, entity_right, table);
+	    associative_entity_1_1_to_pk(prefix, table_name, entity_right, table);
+	    associative_entity_1_N_to_pk(prefix, table_name, entity_right, table);
+	    associative_entity_N_N_to_pk(prefix, table_name, entity_right, table);
+      }
+    }
+    
+    relation associative_entity_1_N_to_unique{
+      rel_link_left : eer::RelationshipLink;
+      rel_link_right : eer::RelationshipLink; 
+      entity_left : eer::EntityType;
+      entity_right : eer::EntityType;
+      table_left : relational::BaseTable; 
+	  table_right : relational::BaseTable;
+	  primitive domain prefix: String;
+      primitive domain table_name : String; 
+	  checkonly domain eer associative_entity : eer::AssociativeEntity {
+	    contains = relationship : eer::Relationship {
+	    }
+	  };
+	  enforce domain rdbm table: relational::BaseTable {
+	  };
+      when{
+        relationship.relationshipLink->size()= 2;
+        relationship.relationshipLink->select(x : eer::RelationshipLink | x.cardinality = eer::CardinalityType::ONE)->size()=1;
+        rel_link_left = relationship.relationshipLink->select(x: eer::RelationshipLink | x.cardinality = eer::CardinalityType::ONE )->at(1);
+        rel_link_right = relationship.relationshipLink->select(x: eer::RelationshipLink | x.cardinality = eer::CardinalityType::MANY)->at(1);
+        rel_link_left <> rel_link_right;
+        entity_left = rel_link_left.source;
+	    entity_right = rel_link_right.source;
+	    entity_to_table(entity_left, table_left) or weak_entity_to_table(entity_left, table_left) or 
+        direct_inheritance_to_table(entity_left, table_left) or specialized_inheritance_to_table(entity_left, table_left) or
+        associative_entity_1_1_to_table(entity_left, table_left) or associative_entity_1_N_to_table(entity_left, table_left) or 
+        associative_entity_N_N_to_table(entity_left, table_left);
+	    entity_to_table(entity_right, table_right) or weak_entity_to_table(entity_right, table_right) or 
+        direct_inheritance_to_table(entity_right, table_right) or specialized_inheritance_to_table(entity_right, table_right) or
+        associative_entity_1_1_to_table(entity_right, table_right) or associative_entity_1_N_to_table(entity_right, table_right) or 
+        associative_entity_N_N_to_table(entity_right, table_right);    
+      }
+      where{
+        //RIGHT
+        element_attribute_to_unique(prefix, table_name, entity_right, table);
+	    element_attribute_compound_to_unique(prefix, table_name, entity_right, table);
+	    direct_inheritance_to_unique(prefix, table_name, entity_right, table);
+	    weak_entity_to_unique(prefix, table_name, entity_right, table);
+	    specialized_inheritance_to_unique(prefix, table_name, entity_right, table);
+	    associative_entity_1_1_to_unique(prefix, table_name, entity_right, table);
+	    associative_entity_1_N_to_unique(prefix, table_name, entity_right, table);
+	    associative_entity_N_N_to_unique(prefix, table_name, entity_right, table);
+      }
+    }
+    
+    relation associative_entity_1_N_to_fk{
+      rel_link_left : eer::RelationshipLink;
+      rel_link_right : eer::RelationshipLink; 
+      entity_left : eer::EntityType;
+      entity_right : eer::EntityType;
+      table_left : relational::BaseTable; 
+	  table_right : relational::BaseTable;
+	  primitive domain prefix: String;
+      primitive domain table_name : String;
+      primitive domain is_nullable : String;
+      checkonly domain rdbm table_referenced : relational::BaseTable {};
+	  checkonly domain eer associative_entity : eer::AssociativeEntity {
+	    contains = relationship : eer::Relationship {
+	    }
+	  };
+	  enforce domain rdbm table: relational::BaseTable {
+	  };
+      when{
+  		relationship.relationshipLink->size()= 2;
+        relationship.relationshipLink->select(x : eer::RelationshipLink | x.cardinality = eer::CardinalityType::ONE)->size()=1;
+        rel_link_left = relationship.relationshipLink->select(x: eer::RelationshipLink | x.cardinality = eer::CardinalityType::ONE )->at(1);
+        rel_link_right = relationship.relationshipLink->select(x: eer::RelationshipLink | x.cardinality = eer::CardinalityType::MANY)->at(1);
+        rel_link_left <> rel_link_right;
+        entity_left = rel_link_left.source;
+	    entity_right = rel_link_right.source;
+	    entity_to_table(entity_left, table_left) or weak_entity_to_table(entity_left, table_left) or 
+        direct_inheritance_to_table(entity_left, table_left) or specialized_inheritance_to_table(entity_left, table_left) or
+        associative_entity_1_1_to_table(entity_left, table_left) or associative_entity_1_N_to_table(entity_left, table_left) or 
+        associative_entity_N_N_to_table(entity_left, table_left);
+	    entity_to_table(entity_right, table_right) or weak_entity_to_table(entity_right, table_right) or 
+        direct_inheritance_to_table(entity_right, table_right) or specialized_inheritance_to_table(entity_right, table_right) or
+        associative_entity_1_1_to_table(entity_right, table_right) or associative_entity_1_N_to_table(entity_right, table_right) or 
+        associative_entity_N_N_to_table(entity_right, table_right);    
+      }
+      where{
+        //RIGHT
+        (element_attribute_to_fk(prefix, table_name, is_nullable,table, entity_right, table_referenced) or
+        element_attribute_compound_to_fk(prefix, table_name, is_nullable,table, entity_right, table_referenced) or
+	    weak_entity_to_fk(prefix, table_name, is_nullable, table_referenced, entity_right, table) or
+	    direct_inheritance_to_fk(prefix, table_name, is_nullable, table_referenced, entity_right, table) or 
+	    specialized_inheritance_to_fk(prefix, table_name, is_nullable, table_referenced, entity_right, table) or 
+	    associative_entity_1_1_to_fk(prefix, table_name, is_nullable, table_referenced, entity_right, table) or 
+	    associative_entity_1_N_to_fk(prefix, table_name, is_nullable, table_referenced, entity_right, table) or
+	    associative_entity_N_N_to_fk(prefix, table_name, is_nullable, table_referenced, entity_right, table) or  true);  
+      }
+    }
+    
+    top relation associative_entity_N_N_to_table{
+      rel_link_left : eer::RelationshipLink;
+      rel_link_right : eer::RelationshipLink; 
+      entity_left : eer::EntityType;
+      entity_right : eer::EntityType;
+      table_left : relational::BaseTable; 
+	  table_right : relational::BaseTable;
+	  checkonly domain eer associative_entity : eer::AssociativeEntity {
+	    contains = relationship : eer::Relationship {
+	    }
+	  };
+	  enforce domain rdbm table: relational::BaseTable {
+	    name = associative_entity.name	
+	  };
+      when{
+        relationship.relationshipLink->size()= 2;
+        relationship.relationshipLink->select(x : eer::RelationshipLink | x.cardinality = eer::CardinalityType::MANY)->size()=2;
+        rel_link_left = relationship.relationshipLink->select(x: eer::RelationshipLink | x.cardinality = eer::CardinalityType::MANY )->at(1);
+        rel_link_right = relationship.relationshipLink->select(x: eer::RelationshipLink | x.cardinality = eer::CardinalityType::MANY)->at(2);
+        rel_link_left <> rel_link_right;
+        entity_left = rel_link_left.source;
+	    entity_right = rel_link_right.source;
+	    entity_to_table(entity_left, table_left) or weak_entity_to_table(entity_left, table_left) or 
+        direct_inheritance_to_table(entity_left, table_left) or specialized_inheritance_to_table(entity_left, table_left) or
+        associative_entity_1_1_to_table(entity_left, table_left) or associative_entity_1_N_to_table(entity_left, table_left) or
+        associative_entity_N_N_to_table(entity_left, table_left);
+	    entity_to_table(entity_right, table_right) or weak_entity_to_table(entity_right, table_right) or 
+        direct_inheritance_to_table(entity_right, table_right) or specialized_inheritance_to_table(entity_right, table_right) or
+        associative_entity_1_1_to_table(entity_right, table_right) or associative_entity_1_N_to_table(entity_right, table_right) or
+        associative_entity_N_N_to_table(entity_right, table_right);    
+      }
+      where{
+        element_attribute_to_column('', relationship, table);
+        element_attribute_compound_to_column('', relationship , table);
+        element_attribute_to_table(associative_entity.name, associative_entity.name, relationship, table, associative_entity);
+        element_attribute_compound_to_table(associative_entity.name, associative_entity.name, relationship, table, associative_entity);
+        
+        element_attribute_to_pk(relationship.name+'_'+entity_left.name+'_', associative_entity.name, entity_left, table);
+        element_attribute_to_fk(relationship.name+'_'+entity_left.name, entity_left.name, 'false', table, entity_left, table_left); 
+	    element_attribute_compound_to_pk(relationship.name+'_'+entity_left.name+'_', associative_entity.name, entity_left, table);
+	    element_attribute_compound_to_fk(relationship.name+'_'+entity_left.name, entity_left.name, 'false', table, entity_left, table_left); 
+	    direct_inheritance_to_pk(relationship.name+'_'+entity_left.name, associative_entity.name, entity_left, table);
+	    direct_inheritance_to_fk(relationship.name+'_'+entity_left.name, entity_left.name, 'false', table_left, entity_left, table); 
+	    weak_entity_to_pk(relationship.name+'_'+entity_left.name, associative_entity.name, entity_left, table);
+	    weak_entity_to_fk(relationship.name+'_'+entity_left.name, entity_left.name, 'false', table_left, entity_left, table); 
+	    specialized_inheritance_to_pk(relationship.name+'_'+entity_left.name, associative_entity.name, entity_left, table);
+	    specialized_inheritance_to_fk(relationship.name+'_'+entity_left.name, entity_left.name, 'false', table_left, entity_left, table);
+	    associative_entity_1_1_to_pk(relationship.name+'_'+entity_left.name, associative_entity.name, entity_left, table);
+	    associative_entity_1_1_to_fk(relationship.name+'_'+entity_left.name, entity_left.name, 'false', table_left, entity_left, table);
+	    associative_entity_1_N_to_pk(relationship.name+'_'+entity_left.name, associative_entity.name, entity_left, table);
+	    associative_entity_1_N_to_fk(relationship.name+'_'+entity_left.name, entity_left.name, 'false', table_left, entity_left, table);
+	    associative_entity_N_N_to_pk(relationship.name+'_'+entity_left.name, associative_entity.name, entity_left, table);
+	    associative_entity_N_N_to_fk(relationship.name+'_'+entity_left.name, entity_left.name, 'false', table_left, entity_left, table);
+	    //RIGHT
+	    element_attribute_to_pk(relationship.name+'_'+entity_right.name+'_', associative_entity.name, entity_right, table);
+	    element_attribute_to_fk(relationship.name+'_'+entity_right.name, entity_right.name, 'false', table, entity_right, table_right); 
+	    element_attribute_compound_to_pk(relationship.name+'_'+entity_right.name+'_', associative_entity.name, entity_right, table);
+	    element_attribute_compound_to_fk(relationship.name+'_'+entity_right.name, entity_right.name, 'false', table, entity_right, table_right);
+	    direct_inheritance_to_pk(relationship.name+'_'+entity_right.name, associative_entity.name, entity_right, table);
+	    direct_inheritance_to_fk(relationship.name+'_'+entity_right.name, entity_right.name, 'false', table_right, entity_right, table); 
+	    weak_entity_to_pk(relationship.name+'_'+entity_right.name, associative_entity.name, entity_right, table);
+	    weak_entity_to_fk(relationship.name+'_'+entity_right.name, entity_right.name, 'false', table_right, entity_right, table); 
+	    specialized_inheritance_to_pk(relationship.name+'_'+entity_right.name, associative_entity.name, entity_right, table);
+	    specialized_inheritance_to_fk(relationship.name+'_'+entity_right.name, entity_right.name, 'false', table_right, entity_right, table);
+	    associative_entity_1_1_to_pk(relationship.name+'_'+entity_right.name, associative_entity.name, entity_right, table);
+	    associative_entity_1_1_to_fk(relationship.name+'_'+entity_right.name, entity_right.name, 'false', table_right, entity_right, table);
+	    associative_entity_1_N_to_pk(relationship.name+'_'+entity_right.name, associative_entity.name, entity_right, table);
+	    associative_entity_1_N_to_fk(relationship.name+'_'+entity_right.name, entity_right.name, 'false', table_right, entity_right, table);
+	    associative_entity_N_N_to_pk(relationship.name+'_'+entity_right.name, associative_entity.name, entity_right, table);
+	    associative_entity_N_N_to_fk(relationship.name+'_'+entity_right.name, entity_right.name, 'false', table_right, entity_right, table);
+	    
+	    if rel_link_left.participation = eer::CompletenessType::TOTAL then
+	       trigger_insert(associative_entity.name, relationship.name, entity_left, table_left) or 
+	       trigger_update_or_delete(entity_left.name, relationship.name, associative_entity, table) or true
+	    else
+	      true
+	    endif;  
+	    if rel_link_right.participation = eer::CompletenessType::TOTAL then
+	       trigger_insert(associative_entity.name, relationship.name, entity_right, table_right) or
+	       trigger_update_or_delete(entity_right.name, relationship.name, associative_entity, table) or true
+	    else
+	      true
+	    endif;
+      }
+    }
+    
+    relation associative_entity_N_N_to_pk{
+      rel_link_left : eer::RelationshipLink;
+      rel_link_right : eer::RelationshipLink; 
+      entity_left : eer::EntityType;
+      entity_right : eer::EntityType;
+      table_left : relational::BaseTable; 
+	  table_right : relational::BaseTable;
+	  primitive domain prefix: String;
+      primitive domain table_name : String; 
+	  checkonly domain eer associative_entity : eer::AssociativeEntity {
+	    contains = relationship : eer::Relationship {
+	    }
+	  };
+	  enforce domain rdbm table: relational::BaseTable {
+	  };
+      when{
+  	    relationship.relationshipLink->size()= 2;
+        relationship.relationshipLink->select(x : eer::RelationshipLink | x.cardinality = eer::CardinalityType::MANY)->size()=2;
+        rel_link_left = relationship.relationshipLink->select(x: eer::RelationshipLink | x.cardinality = eer::CardinalityType::MANY )->at(1);
+        rel_link_right = relationship.relationshipLink->select(x: eer::RelationshipLink | x.cardinality = eer::CardinalityType::MANY)->at(2);
+        rel_link_left <> rel_link_right;
+        entity_left = rel_link_left.source;
+	    entity_right = rel_link_right.source;
+	    entity_to_table(entity_left, table_left) or weak_entity_to_table(entity_left, table_left) or 
+        direct_inheritance_to_table(entity_left, table_left) or specialized_inheritance_to_table(entity_left, table_left) or
+        associative_entity_1_1_to_table(entity_left, table_left) or associative_entity_1_N_to_table(entity_left, table_left) or
+        associative_entity_N_N_to_table(entity_left, table_left);
+	    entity_to_table(entity_right, table_right) or weak_entity_to_table(entity_right, table_right) or 
+        direct_inheritance_to_table(entity_right, table_right) or specialized_inheritance_to_table(entity_right, table_right) or
+        associative_entity_1_1_to_table(entity_right, table_right) or associative_entity_1_N_to_table(entity_right, table_right) or
+        associative_entity_N_N_to_table(entity_right, table_right);    
+      }
+      where{
+        //LEFT
+      	element_attribute_to_pk(prefix+'_', table_name, entity_left, table);
+	    element_attribute_compound_to_pk(prefix+'_', table_name, entity_left, table);
+	    direct_inheritance_to_pk(prefix, table_name, entity_left, table);
+	    weak_entity_to_pk(prefix, table_name, entity_left, table);
+	    specialized_inheritance_to_pk(prefix, table_name, entity_left, table);
+	    associative_entity_1_1_to_pk(prefix, table_name, entity_left, table);
+	    associative_entity_1_N_to_pk(prefix, table_name, entity_left, table);
+	    associative_entity_N_N_to_pk(prefix, table_name, entity_left, table);
+	    //RIGHT
+	    element_attribute_to_pk(prefix+'_', table_name, entity_right, table);
+	    element_attribute_compound_to_pk(prefix+'_', table_name, entity_right, table);
+	    direct_inheritance_to_pk(prefix, table_name, entity_right, table);
+	    weak_entity_to_pk(prefix, table_name, entity_right, table);
+	    specialized_inheritance_to_pk(prefix, table_name, entity_right, table);
+	    associative_entity_1_1_to_pk(prefix, table_name, entity_right, table);
+	    associative_entity_1_N_to_pk(prefix, table_name, entity_right, table);
+	    associative_entity_N_N_to_pk(prefix, table_name, entity_right, table);
+      }
+    }
+    
+    relation associative_entity_N_N_to_unique{
+      rel_link_left : eer::RelationshipLink;
+      rel_link_right : eer::RelationshipLink; 
+      entity_left : eer::EntityType;
+      entity_right : eer::EntityType;
+      table_left : relational::BaseTable; 
+	  table_right : relational::BaseTable;
+	  primitive domain prefix: String;
+      primitive domain table_name : String; 
+	  checkonly domain eer associative_entity : eer::AssociativeEntity {
+	    contains = relationship : eer::Relationship {
+	    }
+	  };
+	  enforce domain rdbm table: relational::BaseTable {
+	  };
+      when{
+  	    relationship.relationshipLink->size()= 2;
+        relationship.relationshipLink->select(x : eer::RelationshipLink | x.cardinality = eer::CardinalityType::MANY)->size()=2;
+        rel_link_left = relationship.relationshipLink->select(x: eer::RelationshipLink | x.cardinality = eer::CardinalityType::MANY )->at(1);
+        rel_link_right = relationship.relationshipLink->select(x: eer::RelationshipLink | x.cardinality = eer::CardinalityType::MANY)->at(2);
+        rel_link_left <> rel_link_right;
+        entity_left = rel_link_left.source;
+	    entity_right = rel_link_right.source;
+	    entity_to_table(entity_left, table_left) or weak_entity_to_table(entity_left, table_left) or 
+        direct_inheritance_to_table(entity_left, table_left) or specialized_inheritance_to_table(entity_left, table_left) or
+        associative_entity_1_1_to_table(entity_left, table_left) or associative_entity_1_N_to_table(entity_left, table_left) or
+        associative_entity_N_N_to_table(entity_left, table_left);
+	    entity_to_table(entity_right, table_right) or weak_entity_to_table(entity_right, table_right) or 
+        direct_inheritance_to_table(entity_right, table_right) or specialized_inheritance_to_table(entity_right, table_right) or
+        associative_entity_1_1_to_table(entity_right, table_right) or associative_entity_1_N_to_table(entity_right, table_right) or
+        associative_entity_N_N_to_table(entity_right, table_right);    
+     }
+      where{
+        //LEFT
+        element_attribute_to_unique(prefix, table_name, entity_left, table);
+	    element_attribute_compound_to_unique(prefix, table_name, entity_left, table);
+	    direct_inheritance_to_unique(prefix, table_name, entity_left, table);
+	    weak_entity_to_unique(prefix, table_name, entity_left, table);
+	    specialized_inheritance_to_unique(prefix, table_name, entity_left, table);
+	    associative_entity_1_1_to_unique(prefix, table_name, entity_left, table);
+	    associative_entity_1_N_to_unique(prefix, table_name, entity_left, table);
+	    associative_entity_N_N_to_unique(prefix, table_name, entity_left, table);
+        //RIGHT
+        element_attribute_to_unique(prefix, table_name, entity_right, table);
+	    element_attribute_compound_to_unique(prefix, table_name, entity_right, table);
+	    direct_inheritance_to_unique(prefix, table_name, entity_right, table);
+	    weak_entity_to_unique(prefix, table_name, entity_right, table);
+	    specialized_inheritance_to_unique(prefix, table_name, entity_right, table);
+	    associative_entity_1_1_to_unique(prefix, table_name, entity_right, table);
+	    associative_entity_1_N_to_unique(prefix, table_name, entity_right, table);
+	    associative_entity_N_N_to_unique(prefix, table_name, entity_right, table);
+      }
+    }
+    
+    relation associative_entity_N_N_to_fk{
+      rel_link_left : eer::RelationshipLink;
+      rel_link_right : eer::RelationshipLink; 
+      entity_left : eer::EntityType;
+      entity_right : eer::EntityType;
+      table_left : relational::BaseTable; 
+	  table_right : relational::BaseTable;
+	  primitive domain prefix: String;
+      primitive domain table_name : String;
+      primitive domain is_nullable : String;
+      checkonly domain rdbm table_referenced : relational::BaseTable {};
+	  checkonly domain eer associative_entity : eer::AssociativeEntity {
+	    contains = relationship : eer::Relationship {
+	    }
+	  };
+	  enforce domain rdbm table: relational::BaseTable {	
+	  };
+      when{
+  	    relationship.relationshipLink->size()= 2;
+        relationship.relationshipLink->select(x : eer::RelationshipLink | x.cardinality = eer::CardinalityType::MANY)->size()=2;
+        rel_link_left = relationship.relationshipLink->select(x: eer::RelationshipLink | x.cardinality = eer::CardinalityType::MANY )->at(1);
+        rel_link_right = relationship.relationshipLink->select(x: eer::RelationshipLink | x.cardinality = eer::CardinalityType::MANY)->at(2);
+        entity_left = rel_link_left.source;
+	    entity_right = rel_link_right.source;
+	    entity_left <> entity_right;
+	    entity_to_table(entity_left, table_left) or weak_entity_to_table(entity_left, table_left) or 
+        direct_inheritance_to_table(entity_left, table_left) or specialized_inheritance_to_table(entity_left, table_left) or
+        associative_entity_1_1_to_table(entity_left, table_left) or associative_entity_1_N_to_table(entity_left, table_left) or
+        associative_entity_N_N_to_table(entity_left, table_left);
+	    entity_to_table(entity_right, table_right) or weak_entity_to_table(entity_right, table_right) or 
+        direct_inheritance_to_table(entity_right, table_right) or specialized_inheritance_to_table(entity_right, table_right) or
+        associative_entity_1_1_to_table(entity_right, table_right) or associative_entity_1_N_to_table(entity_right, table_right) or
+        associative_entity_N_N_to_table(entity_right, table_right);    
+          }
+      where{
+        //LEFT
+        (element_attribute_to_fk(prefix, table_name, is_nullable,table, entity_left, table_referenced) or
+        element_attribute_compound_to_fk(prefix, table_name, is_nullable,table, entity_left, table_referenced) or
+	    weak_entity_to_fk(prefix, table_name, is_nullable, table_referenced, entity_left, table) or
+	    direct_inheritance_to_fk(prefix, table_name, is_nullable, table_referenced, entity_left, table) or 
+	    specialized_inheritance_to_fk(prefix, table_name, is_nullable, table_referenced, entity_left, table) or 
+	    associative_entity_1_1_to_fk(prefix, table_name, is_nullable, table_referenced, entity_left, table) or 
+	    associative_entity_1_N_to_fk(prefix, table_name, is_nullable, table_referenced, entity_left, table) or 
+	    associative_entity_N_N_to_fk(prefix, table_name, is_nullable, table_referenced, entity_left, table) or true); 
+        //RIGHT
+        (element_attribute_to_fk(prefix, table_name, is_nullable,table, entity_right, table_referenced) or
+        element_attribute_compound_to_fk(prefix, table_name, is_nullable,table, entity_right, table_referenced) or
+	    weak_entity_to_fk(prefix, table_name, is_nullable, table_referenced, entity_right, table) or
+	    direct_inheritance_to_fk(prefix, table_name, is_nullable, table_referenced, entity_right, table) or 
+	    specialized_inheritance_to_fk(prefix, table_name, is_nullable, table_referenced, entity_right, table) or 
+	    associative_entity_1_1_to_fk(prefix, table_name, is_nullable, table_referenced, entity_right, table) or 
+	    associative_entity_1_N_to_fk(prefix, table_name, is_nullable, table_referenced, entity_right, table) or 
+	    associative_entity_N_N_to_fk(prefix, table_name, is_nullable, table_referenced, entity_right, table) or true);  
+      }
+    }
+    
+    top relation associative_entity_nary_to_table{
+      rel_link_choosen : eer::RelationshipLink;
+      table_entity : relational::BaseTable;
+      checkonly domain eer associative_entity : eer::AssociativeEntity {
+	    contains = relationship : eer::Relationship {
+          relationshipLink = rel_link : eer::RelationshipLink {
+            source = entity : eer::EntityType {}
+          }
+        }  
+	  };
+	  enforce domain rdbm table: relational::BaseTable {
+	    name = associative_entity.name	
+	  };
+      when{
+        relationship.relationshipLink->size()> 2;
+      	entity_to_table(entity, table_entity) or weak_entity_to_table(entity, table_entity) or 
+        direct_inheritance_to_table(entity, table_entity) or specialized_inheritance_to_table(entity, table_entity) or
+        associative_entity_1_1_to_table(entity, table_entity) or associative_entity_1_N_to_table(entity, table_entity) or
+        associative_entity_N_N_to_table(entity, table_entity) or associative_entity_nary_to_table(entity, table_entity);
+      }
+      where{
+        element_attribute_to_column('', relationship, table);
+        element_attribute_compound_to_column('', relationship , table);
+        element_attribute_to_table(associative_entity.name, associative_entity.name, relationship, table, relationship);
+        element_attribute_compound_to_table(associative_entity.name, associative_entity.name, relationship, table, relationship);
+        
+        element_attribute_to_fk(associative_entity.name+'_'+entity.name, entity.name, 'false', table, entity, table_entity);
+        element_attribute_compound_to_fk(associative_entity.name+'_'+entity.name, entity.name, 'false', table, entity, table_entity);
+        direct_inheritance_to_fk(associative_entity.name+'_'+entity.name, entity.name, 'false', table_entity, entity, table); 
+        weak_entity_to_fk(associative_entity.name+'_'+entity.name, entity.name, 'false', table_entity, entity, table); 
+        specialized_inheritance_to_fk(associative_entity.name+'_'+entity.name, entity.name, 'false', table_entity, entity, table);
+        associative_entity_1_1_to_fk(associative_entity.name+'_'+entity.name, entity.name, 'false', table_entity, entity, table);
+        associative_entity_1_N_to_fk(associative_entity.name+'_'+entity.name, entity.name, 'false', table_entity, entity, table);
+        associative_entity_N_N_to_fk(associative_entity.name+'_'+entity.name, entity.name, 'false', table_entity, entity, table);	      	      
+        
+        rel_link_choosen = relationship.relationshipLink->select(x: eer::RelationshipLink | x.attributeToHere = true )->at(1);
+        
+        
+        if relationship.relationshipLink->select(x : eer::RelationshipLink | x.cardinality = eer::CardinalityType::ONE)->size()>1 then
+          if rel_link.cardinality = eer::CardinalityType::ONE then
+            if rel_link_choosen <> rel_link then
+              element_attribute_to_pk(associative_entity.name+'_'+entity.name+'_', associative_entity.name, entity, table) or
+	          element_attribute_compound_to_pk(associative_entity.name+'_'+entity.name+'_', associative_entity.name, entity, table) or 
+	          direct_inheritance_to_pk(associative_entity.name+'_'+entity.name, associative_entity.name, entity, table) or
+	          weak_entity_to_pk(associative_entity.name+'_'+entity.name, associative_entity.name, entity, table) or
+	          specialized_inheritance_to_pk(associative_entity.name+'_'+entity.name, associative_entity.name, entity, table) or
+	          associative_entity_1_1_to_pk(associative_entity.name+'_'+entity.name, associative_entity.name, entity, table) or
+	          associative_entity_1_N_to_pk(associative_entity.name+'_'+entity.name, associative_entity.name, entity, table) or
+	          associative_entity_N_N_to_pk(associative_entity.name+'_'+entity.name, associative_entity.name, entity, table) or
+	          --UNIQUE
+	          element_attribute_to_unique(associative_entity.name+'_'+entity.name+'_', associative_entity.name+'_'+rel_link_choosen.source.name, entity, table) or
+	          element_attribute_compound_to_unique(associative_entity.name+'_'+entity.name+'_', associative_entity.name+'_'+rel_link_choosen.source.name, entity, table) or
+	          direct_inheritance_to_unique(associative_entity.name+'_'+entity.name+'_', associative_entity.name+'_'+rel_link_choosen.source.name, entity, table) or
+	          weak_entity_to_unique(associative_entity.name+'_'+entity.name+'_', associative_entity.name+'_'+rel_link_choosen.source.name, entity, table) or
+	          specialized_inheritance_to_unique(associative_entity.name+'_'+entity.name+'_', associative_entity.name+'_'+rel_link_choosen.source.name, entity, table) or
+	          associative_entity_1_1_to_unique(associative_entity.name+'_'+entity.name+'_', associative_entity.name+'_'+rel_link_choosen.source.name, entity, table) or
+	          associative_entity_1_N_to_unique(associative_entity.name+'_'+entity.name+'_', associative_entity.name+'_'+rel_link_choosen.source.name, entity, table) or
+	          associative_entity_N_N_to_unique(associative_entity.name+'_'+entity.name+'_', associative_entity.name+'_'+rel_link_choosen.source.name, entity, table) or true 
+            else
+              element_attribute_to_unique(associative_entity.name+'_'+entity.name+'_', associative_entity.name+'_'+entity.name, entity, table) or
+	          element_attribute_compound_to_unique(associative_entity.name+'_'+entity.name+'_', associative_entity.name+'_'+entity.name, entity, table) or
+	          direct_inheritance_to_unique(associative_entity.name+'_'+entity.name+'_', associative_entity.name+'_'+entity.name, entity, table) or
+	          weak_entity_to_unique(associative_entity.name+'_'+entity.name+'_', associative_entity.name+'_'+entity.name, entity, table) or
+	          specialized_inheritance_to_unique(associative_entity.name+'_'+entity.name+'_', associative_entity.name+'_'+entity.name, entity, table) or
+	          associative_entity_1_1_to_unique(associative_entity.name+'_'+entity.name+'_', associative_entity.name+'_'+entity.name, entity, table) or
+	          associative_entity_1_N_to_unique(associative_entity.name+'_'+entity.name+'_', associative_entity.name+'_'+entity.name, entity, table) or
+	          associative_entity_N_N_to_unique(associative_entity.name+'_'+entity.name+'_', associative_entity.name+'_'+entity.name, entity, table) or true 
+            endif
+          else
+            element_attribute_to_pk(associative_entity.name+'_'+entity.name+'_', associative_entity.name, entity, table) or
+	        element_attribute_compound_to_pk(associative_entity.name+'_'+entity.name+'_', associative_entity.name, entity, table) or 
+	        direct_inheritance_to_pk(associative_entity.name+'_'+entity.name, associative_entity.name, entity, table) or
+	        weak_entity_to_pk(associative_entity.name+'_'+entity.name, associative_entity.name, entity, table) or
+	        specialized_inheritance_to_pk(associative_entity.name+'_'+entity.name, associative_entity.name, entity, table) or
+	        associative_entity_1_1_to_pk(associative_entity.name+'_'+entity.name, associative_entity.name, entity, table) or
+	        associative_entity_1_N_to_pk(associative_entity.name+'_'+entity.name, associative_entity.name, entity, table) or
+	        associative_entity_N_N_to_pk(associative_entity.name+'_'+entity.name, associative_entity.name, entity, table) or true
+          endif  
+        else
+          if rel_link.cardinality <> eer::CardinalityType::ONE then
+            element_attribute_to_pk(associative_entity.name+'_'+entity.name+'_', associative_entity.name, entity, table) or
+	        element_attribute_compound_to_pk(associative_entity.name+'_'+entity.name+'_', associative_entity.name, entity, table) or 
+	        direct_inheritance_to_pk(associative_entity.name+'_'+entity.name, associative_entity.name, entity, table) or
+	        weak_entity_to_pk(associative_entity.name+'_'+entity.name, associative_entity.name, entity, table) or
+	        specialized_inheritance_to_pk(associative_entity.name+'_'+entity.name, associative_entity.name, entity, table) or
+	        associative_entity_1_1_to_pk(associative_entity.name+'_'+entity.name, associative_entity.name, entity, table) or
+	        associative_entity_1_N_to_pk(associative_entity.name+'_'+entity.name, associative_entity.name, entity, table) or
+	        associative_entity_N_N_to_pk(associative_entity.name+'_'+entity.name, associative_entity.name, entity, table) or true
+          else
+            true
+          endif
+        endif;    
+	    
+	    if rel_link.participation = eer::CompletenessType::TOTAL then
+	       trigger_insert(associative_entity.name, associative_entity.name, entity, table_entity) or 
+	       trigger_update_or_delete(entity.name, associative_entity.name, associative_entity, table) or true
+	    else
+	      true
+	    endif;  
+      }
+    }
+    
+    relation associative_entity_nary_to_pk{
+      rel_link_choosen : eer::RelationshipLink;
+      table_entity : relational::BaseTable; 
+	  primitive domain prefix: String;
+      primitive domain table_name : String; 
+      checkonly domain eer associative_entity : eer::AssociativeEntity {
+	    contains = relationship : eer::Relationship {
+          relationshipLink = rel_link : eer::RelationshipLink {
+            source = entity : eer::EntityType {}
+          }
+        }  
+	  };
+	  enforce domain rdbm table: relational::BaseTable {	
+	  };
+      when{
+        relationship.relationshipLink->size()> 2;
+      	entity_to_table(entity, table_entity) or weak_entity_to_table(entity, table_entity) or 
+        direct_inheritance_to_table(entity, table_entity) or specialized_inheritance_to_table(entity, table_entity) or
+        associative_entity_1_1_to_table(entity, table_entity) or associative_entity_1_N_to_table(entity, table_entity) or
+        associative_entity_N_N_to_table(entity, table_entity) or associative_entity_nary_to_table(entity, table_entity);   
+      }
+      where{
+      
+       rel_link_choosen = relationship.relationshipLink->select(x: eer::RelationshipLink | x.attributeToHere = true )->at(1);
+        
+       if relationship.relationshipLink->select(x : eer::RelationshipLink | x.cardinality = eer::CardinalityType::ONE)->size()>1 then
+        if rel_link.cardinality = eer::CardinalityType::ONE then
+          if rel_link_choosen <> rel_link then
+            element_attribute_to_pk(prefix+'_', table_name, entity, table) or
+	        element_attribute_compound_to_pk(prefix+'_', table_name, entity, table) or
+	        direct_inheritance_to_pk(prefix, table_name, entity, table) or
+	        weak_entity_to_pk(prefix, table_name, entity, table) or
+	        specialized_inheritance_to_pk(prefix, table_name, entity, table) or
+	        associative_entity_1_1_to_pk(prefix, table_name, entity, table) or
+	        associative_entity_1_N_to_pk(prefix, table_name, entity, table) or
+	        associative_entity_N_N_to_pk(prefix, table_name, entity, table) or
+	        associative_entity_nary_to_pk(prefix, table_name, entity, table) or true
+          else
+            true
+          endif    
+        else
+          true
+        endif
+       else
+        if rel_link.cardinality <> eer::CardinalityType::ONE then
+          element_attribute_to_pk(prefix+'_', table_name, entity, table) or
+	      element_attribute_compound_to_pk(prefix+'_', table_name, entity, table) or
+	      direct_inheritance_to_pk(prefix, table_name, entity, table) or
+	      weak_entity_to_pk(prefix, table_name, entity, table) or
+	      specialized_inheritance_to_pk(prefix, table_name, entity, table) or
+	      associative_entity_1_1_to_pk(prefix, table_name, entity, table) or
+	      associative_entity_1_N_to_pk(prefix, table_name, entity, table) or
+	      associative_entity_N_N_to_pk(prefix, table_name, entity, table) or
+	      associative_entity_nary_to_pk(prefix, table_name, entity, table) or true
+        else
+          true
+        endif
+       endif;       
+      }
+    }
+    
+    relation associative_entity_nary_to_unique{
+      rel_link_choosen : eer::RelationshipLink;
+      table_entity : relational::BaseTable; 
+	  primitive domain prefix: String;
+      primitive domain table_name : String; 
+      checkonly domain eer associative_entity : eer::AssociativeEntity {
+	    contains = relationship : eer::Relationship {
+          relationshipLink = rel_link : eer::RelationshipLink {
+            source = entity : eer::EntityType {}
+          }
+        }  
+	  };
+	  enforce domain rdbm table: relational::BaseTable {
+	  };
+      when{
+        relationship.relationshipLink->size()> 2;
+      	entity_to_table(entity, table_entity) or weak_entity_to_table(entity, table_entity) or 
+        direct_inheritance_to_table(entity, table_entity) or specialized_inheritance_to_table(entity, table_entity) or
+        associative_entity_1_1_to_table(entity, table_entity) or associative_entity_1_N_to_table(entity, table_entity) or
+        associative_entity_N_N_to_table(entity, table_entity) or associative_entity_nary_to_table(entity, table_entity);   
+      }
+      where{
+      
+       rel_link_choosen = relationship.relationshipLink->select(x: eer::RelationshipLink | x.attributeToHere = true )->at(1);
+        
+       if relationship.relationshipLink->select(x : eer::RelationshipLink | x.cardinality = eer::CardinalityType::ONE)->size()>1 then
+        if rel_link.cardinality = eer::CardinalityType::ONE then
+          if rel_link_choosen <> rel_link then
+            element_attribute_to_unique(prefix, table_name, entity, table) or
+	        element_attribute_compound_to_unique(prefix, table_name, entity, table) or
+	        direct_inheritance_to_unique(prefix, table_name, entity, table) or
+	        weak_entity_to_unique(prefix, table_name, entity, table) or
+	        specialized_inheritance_to_unique(prefix, table_name, entity, table) or
+	        associative_entity_1_1_to_unique(prefix, table_name, entity, table) or
+	        associative_entity_1_N_to_unique(prefix, table_name, entity, table) or
+	        associative_entity_N_N_to_unique(prefix, table_name, entity, table) or
+	        associative_entity_nary_to_unique(prefix, table_name, entity, table) or true  
+          else
+            true
+          endif    
+        else
+          true
+        endif
+       else
+        if rel_link.cardinality <> eer::CardinalityType::ONE then
+         element_attribute_to_unique(prefix, table_name, entity, table) or
+	     element_attribute_compound_to_unique(prefix, table_name, entity, table) or
+	     direct_inheritance_to_unique(prefix, table_name, entity, table) or
+	     weak_entity_to_unique(prefix, table_name, entity, table) or
+	     specialized_inheritance_to_unique(prefix, table_name, entity, table) or
+	     associative_entity_1_1_to_unique(prefix, table_name, entity, table) or
+	     associative_entity_1_N_to_unique(prefix, table_name, entity, table) or
+	     associative_entity_N_N_to_unique(prefix, table_name, entity, table) or
+	     associative_entity_nary_to_unique(prefix, table_name, entity, table) or true 
+        else
+          true
+        endif
+ 
+       endif;  
+      }
+    }
+    
+    relation associative_entity_nary_to_fk{
+      rel_link_choosen : eer::RelationshipLink;
+      table_entity : relational::BaseTable; 
+	  primitive domain prefix: String;
+      primitive domain table_name : String;
+      primitive domain is_nullable : String;
+      checkonly domain rdbm table_referenced : relational::BaseTable {};
+      checkonly domain eer associative_entity : eer::AssociativeEntity {
+	    contains = relationship : eer::Relationship {
+          relationshipLink = rel_link : eer::RelationshipLink {
+            source = entity : eer::EntityType {}
+          }
+        }  
+	  };
+	  enforce domain rdbm table: relational::BaseTable {
+	  };
+      when{
+        relationship.relationshipLink->size()> 2;
+      	entity_to_table(entity, table_entity) or weak_entity_to_table(entity, table_entity) or 
+        direct_inheritance_to_table(entity, table_entity) or specialized_inheritance_to_table(entity, table_entity) or
+        associative_entity_1_1_to_table(entity, table_entity) or associative_entity_1_N_to_table(entity, table_entity) or
+        associative_entity_N_N_to_table(entity, table_entity) or associative_entity_nary_to_table(entity, table_entity);   
+      }
+      where{
+      
+       rel_link_choosen = relationship.relationshipLink->select(x: eer::RelationshipLink | x.attributeToHere = true )->at(1);
+        
+       if relationship.relationshipLink->select(x : eer::RelationshipLink | x.cardinality = eer::CardinalityType::ONE)->size()>1 then
+        if rel_link.cardinality = eer::CardinalityType::ONE then
+          if rel_link_choosen <> rel_link then
+            element_attribute_to_fk(prefix, table_name, is_nullable,table, entity, table_referenced) or
+            element_attribute_compound_to_fk(prefix, table_name, is_nullable,table, entity, table_referenced) or
+	        weak_entity_to_fk(prefix, table_name, is_nullable, table_referenced, entity, table) or
+	        direct_inheritance_to_fk(prefix, table_name, is_nullable, table_referenced, entity, table) or 
+	        specialized_inheritance_to_fk(prefix, table_name, is_nullable, table_referenced, entity, table) or 
+	        associative_entity_1_1_to_fk(prefix, table_name, is_nullable, table_referenced, entity, table) or 
+	        associative_entity_1_N_to_fk(prefix, table_name, is_nullable, table_referenced, entity, table) or 
+	        associative_entity_N_N_to_fk(prefix, table_name, is_nullable, table_referenced, entity, table) or 
+	        associative_entity_nary_to_fk(prefix, table_name, is_nullable, table_referenced, entity, table) or true 
+          else
+            true
+          endif    
+        else
+          true
+        endif
+       else
+        if rel_link.cardinality <> eer::CardinalityType::ONE then
+         element_attribute_to_fk(prefix, table_name, is_nullable,table, entity, table_referenced) or
+         element_attribute_compound_to_fk(prefix, table_name, is_nullable,table, entity, table_referenced) or
+	     weak_entity_to_fk(prefix, table_name, is_nullable, table_referenced, entity, table) or
+	     direct_inheritance_to_fk(prefix, table_name, is_nullable, table_referenced, entity, table) or 
+	     specialized_inheritance_to_fk(prefix, table_name, is_nullable, table_referenced, entity, table) or 
+	     associative_entity_1_1_to_fk(prefix, table_name, is_nullable, table_referenced, entity, table) or 
+	     associative_entity_1_N_to_fk(prefix, table_name, is_nullable, table_referenced, entity, table) or 
+	     associative_entity_N_N_to_fk(prefix, table_name, is_nullable, table_referenced, entity, table) or 
+	     associative_entity_nary_to_fk(prefix, table_name, is_nullable, table_referenced, entity, table) or true 
+        else
+          true
+        endif
+       endif;    
+      }
+    }
+    top relation relationship_nary{
+      rel_link_choosen : eer::RelationshipLink;
+      table_entity : relational::BaseTable; 
+      checkonly domain eer relationship : eer::Relationship {
+        relationshipLink = rel_link : eer::RelationshipLink {
+          source = entity : eer::EntityType {}
+        }
+	  };
+	  enforce domain rdbm table: relational::BaseTable {
+	    name = relationship.name	
+	  };
+      when{
+      	entity_to_table(entity, table_entity) or weak_entity_to_table(entity, table_entity) or 
+        direct_inheritance_to_table(entity, table_entity) or specialized_inheritance_to_table(entity, table_entity) or
+        associative_entity_1_1_to_table(entity, table_entity) or associative_entity_1_N_to_table(entity, table_entity) or
+        associative_entity_N_N_to_table(entity, table_entity) or associative_entity_nary_to_table(entity, table_entity);
+        relationship.associativeEntity.oclIsUndefined();
+        relationship.relationshipLink->size() > 2;
+      }
+      where{
+        element_attribute_to_column('', relationship, table);
+        element_attribute_compound_to_column('', relationship , table);
+        element_attribute_to_table(relationship.name, relationship.name, relationship, table, relationship);
+        element_attribute_compound_to_table(relationship.name, relationship.name, relationship, table, relationship);
+        
+        element_attribute_to_fk(relationship.name+'_'+entity.name, entity.name, 'false', table, entity, table_entity);
+        element_attribute_compound_to_fk(relationship.name+'_'+entity.name, entity.name, 'false', table, entity, table_entity);
+        direct_inheritance_to_fk(relationship.name+'_'+entity.name, entity.name, 'false', table_entity, entity, table); 
+        weak_entity_to_fk(relationship.name+'_'+entity.name, entity.name, 'false', table_entity, entity, table); 
+        specialized_inheritance_to_fk(relationship.name+'_'+entity.name, entity.name, 'false', table_entity, entity, table);
+        associative_entity_1_1_to_fk(relationship.name+'_'+entity.name, entity.name, 'false', table_entity, entity, table);
+        associative_entity_1_N_to_fk(relationship.name+'_'+entity.name, entity.name, 'false', table_entity, entity, table);
+        associative_entity_N_N_to_fk(relationship.name+'_'+entity.name, entity.name, 'false', table_entity, entity, table);	      	      
+        
+        rel_link_choosen = relationship.relationshipLink->select(x: eer::RelationshipLink | x.attributeToHere = true )->at(1);
+        
+        
+        if relationship.relationshipLink->select(x : eer::RelationshipLink | x.cardinality = eer::CardinalityType::ONE)->size()>1 then
+        
+          if rel_link.cardinality = eer::CardinalityType::ONE then
+            if rel_link_choosen <> rel_link then
+              element_attribute_to_pk(relationship.name+'_'+entity.name+'_', relationship.name, entity, table) or
+	          element_attribute_compound_to_pk(relationship.name+'_'+entity.name+'_', relationship.name, entity, table) or 
+	          direct_inheritance_to_pk(relationship.name+'_'+entity.name, relationship.name, entity, table) or
+	          weak_entity_to_pk(relationship.name+'_'+entity.name, relationship.name, entity, table) or
+	          specialized_inheritance_to_pk(relationship.name+'_'+entity.name, relationship.name, entity, table) or
+	          associative_entity_1_1_to_pk(relationship.name+'_'+entity.name, relationship.name, entity, table) or
+	          associative_entity_1_N_to_pk(relationship.name+'_'+entity.name, relationship.name, entity, table) or
+	          associative_entity_N_N_to_pk(relationship.name+'_'+entity.name, relationship.name, entity, table) or true
+	          --UNIQUE
+
+            else
+              element_attribute_to_unique(relationship.name+'_'+entity.name+'_', relationship.name+'_'+entity.name, entity, table) or
+	          element_attribute_compound_to_unique(relationship.name+'_'+entity.name+'_', relationship.name+'_'+entity.name, entity, table) or
+	          direct_inheritance_to_unique(relationship.name+'_'+entity.name+'_', relationship.name+'_'+entity.name, entity, table) or
+	          weak_entity_to_unique(relationship.name+'_'+entity.name+'_', relationship.name+'_'+entity.name, entity, table) or
+	          specialized_inheritance_to_unique(relationship.name+'_'+entity.name+'_', relationship.name+'_'+entity.name, entity, table) or
+	          associative_entity_1_1_to_unique(relationship.name+'_'+entity.name+'_', relationship.name+'_'+entity.name, entity, table) or
+	          associative_entity_1_N_to_unique(relationship.name+'_'+entity.name+'_', relationship.name+'_'+entity.name, entity, table) or
+	          associative_entity_N_N_to_unique(relationship.name+'_'+entity.name+'_', relationship.name+'_'+entity.name, entity, table) or 
+	          
+	          element_attribute_to_unique(relationship.name+'_'+entity.name+'_', relationship.name+'_'+rel_link_choosen.source.name, entity, table) or
+	          element_attribute_compound_to_unique(relationship.name+'_'+entity.name+'_', relationship.name+'_'+rel_link_choosen.source.name, entity, table) or
+	          direct_inheritance_to_unique(relationship.name+'_'+entity.name+'_', relationship.name+'_'+rel_link_choosen.source.name, entity, table) or
+	          weak_entity_to_unique(relationship.name+'_'+entity.name+'_', relationship.name+'_'+rel_link_choosen.source.name, entity, table) or
+	          specialized_inheritance_to_unique(relationship.name+'_'+entity.name+'_', relationship.name+'_'+rel_link_choosen.source.name, entity, table) or
+	          associative_entity_1_1_to_unique(relationship.name+'_'+entity.name+'_', relationship.name+'_'+rel_link_choosen.source.name, entity, table) or
+	          associative_entity_1_N_to_unique(relationship.name+'_'+entity.name+'_', relationship.name+'_'+rel_link_choosen.source.name, entity, table) or
+	          associative_entity_N_N_to_unique(relationship.name+'_'+entity.name+'_', relationship.name+'_'+rel_link_choosen.source.name, entity, table) or true 
+	          
+            endif
+          else
+          -- é N
+            element_attribute_to_pk(relationship.name+'_'+entity.name+'_', relationship.name, entity, table) or
+	        element_attribute_compound_to_pk(relationship.name+'_'+entity.name+'_', relationship.name, entity, table) or 
+	        direct_inheritance_to_pk(relationship.name+'_'+entity.name, relationship.name, entity, table) or
+	        weak_entity_to_pk(relationship.name+'_'+entity.name, relationship.name, entity, table) or
+	        specialized_inheritance_to_pk(relationship.name+'_'+entity.name, relationship.name, entity, table) or
+	        associative_entity_1_1_to_pk(relationship.name+'_'+entity.name, relationship.name, entity, table) or
+	        associative_entity_1_N_to_pk(relationship.name+'_'+entity.name, relationship.name, entity, table) or
+	        associative_entity_N_N_to_pk(relationship.name+'_'+entity.name, relationship.name, entity, table) or
+	         
+	        	          --UNIQUE
+	        element_attribute_to_unique(relationship.name+'_'+entity.name+'_', relationship.name+'_'+rel_link_choosen.source.name, entity, table) or
+	        element_attribute_compound_to_unique(relationship.name+'_'+entity.name+'_', relationship.name+'_'+rel_link_choosen.source.name, entity, table) or
+	        direct_inheritance_to_unique(relationship.name+'_'+entity.name+'_', relationship.name+'_'+rel_link_choosen.source.name, entity, table) or
+	        weak_entity_to_unique(relationship.name+'_'+entity.name+'_', relationship.name+'_'+rel_link_choosen.source.name, entity, table) or
+	        specialized_inheritance_to_unique(relationship.name+'_'+entity.name+'_', relationship.name+'_'+rel_link_choosen.source.name, entity, table) or
+	        associative_entity_1_1_to_unique(relationship.name+'_'+entity.name+'_', relationship.name+'_'+rel_link_choosen.source.name, entity, table) or
+	        associative_entity_1_N_to_unique(relationship.name+'_'+entity.name+'_', relationship.name+'_'+rel_link_choosen.source.name, entity, table) or
+	        associative_entity_N_N_to_unique(relationship.name+'_'+entity.name+'_', relationship.name+'_'+rel_link_choosen.source.name, entity, table) or true  
+	         
+	         
+	         
+	         
+          endif  
+        else
+        
+          if rel_link.cardinality = eer::CardinalityType::ONE then
+            true
+          else
+        
+        
+            element_attribute_to_pk(relationship.name+'_'+entity.name+'_', relationship.name, entity, table) or
+	        element_attribute_compound_to_pk(relationship.name+'_'+entity.name+'_', relationship.name, entity, table) or 
+	        direct_inheritance_to_pk(relationship.name+'_'+entity.name, relationship.name, entity, table) or
+	        weak_entity_to_pk(relationship.name+'_'+entity.name, relationship.name, entity, table) or
+	        specialized_inheritance_to_pk(relationship.name+'_'+entity.name, relationship.name, entity, table) or
+	        associative_entity_1_1_to_pk(relationship.name+'_'+entity.name, relationship.name, entity, table) or
+	        associative_entity_1_N_to_pk(relationship.name+'_'+entity.name, relationship.name, entity, table) or
+	        associative_entity_N_N_to_pk(relationship.name+'_'+entity.name, relationship.name, entity, table) or 
+	        true
+	      endif
+        endif;    
+	    
+	    if rel_link.participation = eer::CompletenessType::TOTAL then
+	       trigger_insert(relationship.name, relationship.name, entity, table_entity) or 
+	       trigger_update_or_delete(entity.name, relationship.name, relationship, table) or true
+	    else
+	      true
+	    endif;  
+      }
+    }
+    
+    top relation binary_relationship_1_1{
+      rel_link_left : eer::RelationshipLink;
+      rel_link_right : eer::RelationshipLink;  
+      entity_left : eer::EntityType;
+      entity_right : eer::EntityType;
+      table_left : relational::BaseTable; 
+	  table_right : relational::BaseTable;
+	  checkonly domain eer relationship : eer::Relationship {
+	    isIdentifier = false
+	  };
+	  enforce domain rdbm fk: relational::ForeignKey {
+	    name = 'FK_'+relationship.name+'_'+table_left.name,
+	    referencedTable = table_left,
+	    baseTable = table_right	
+	  };
+      when{
+        relationship.associativeEntity.oclIsUndefined();
+        relationship.relationshipLink->size()= 2;
+        relationship.relationshipLink->select(x : eer::RelationshipLink | x.cardinality = eer::CardinalityType::ONE)->size()=2;
+        rel_link_right = relationship.relationshipLink->select(x: eer::RelationshipLink | x.attributeToHere = true )->at(1);      
+        rel_link_left = relationship.relationshipLink->select(x: eer::RelationshipLink | x <> rel_link_right )->at(1);
+        entity_left = rel_link_left.source;
+	    entity_right = rel_link_right.source;
+	    entity_left <> entity_right;
+	    entity_to_table(entity_left, table_left) or weak_entity_to_table(entity_left, table_left) or 
+        direct_inheritance_to_table(entity_left, table_left) or specialized_inheritance_to_table(entity_left, table_left) or
+        associative_entity_1_1_to_table(entity_left, table_left) or associative_entity_1_N_to_table(entity_left, table_left) or 
+        associative_entity_N_N_to_table(entity_left, table_left) or associative_entity_nary_to_table(entity_left, table_left);
+	    entity_to_table(entity_right, table_right) or weak_entity_to_table(entity_right, table_right) or 
+        direct_inheritance_to_table(entity_right, table_right) or specialized_inheritance_to_table(entity_right, table_right) or
+        associative_entity_1_1_to_table(entity_right, table_right) or associative_entity_1_N_to_table(entity_right, table_right) or
+        associative_entity_N_N_to_table(entity_right, table_right) or associative_entity_nary_to_table(entity_right, table_right);    
+      }
+      where{
+        element_attribute_to_column('', relationship, table_right);
+        element_attribute_compound_to_column('', relationship , table_right);
+        element_attribute_to_table(relationship.name, relationship.name, relationship, table_right, relationship);
+        element_attribute_compound_to_table(relationship.name, relationship.name, relationship, table_right, relationship);
+        
+        //LEFT
+        element_attribute_to_unique(relationship.name+'_'+entity_left.name+'_', relationship.name, entity_left, table_right);
+	    element_attribute_compound_to_unique(relationship.name+'_'+entity_left.name+'_', relationship.name, entity_left, table_right);
+	    direct_inheritance_to_unique(relationship.name+'_'+entity_left.name, relationship.name, entity_left, table_right);
+	    weak_entity_to_unique(relationship.name+'_'+entity_left.name, relationship.name, entity_left, table_right);
+	    specialized_inheritance_to_unique(relationship.name+'_'+entity_left.name, relationship.name, entity_left, table_right);
+	    associative_entity_1_1_to_unique(relationship.name+'_'+entity_left.name, relationship.name, entity_left, table_right);
+	    associative_entity_1_N_to_unique(relationship.name+'_'+entity_left.name, relationship.name, entity_left, table_right);
+	    associative_entity_N_N_to_unique(relationship.name+'_'+entity_left.name, relationship.name, entity_left, table_right);
+	    associative_entity_nary_to_unique(relationship.name+'_'+entity_left.name, relationship.name, entity_left, table_right);
+
+	    if rel_link_left.participation = eer::CompletenessType::TOTAL then	       
+           trigger_insert(entity_right.name, relationship.name, entity_left, table_left) or
+	       trigger_update_or_delete(entity_left.name, relationship.name, entity_right, table_right) or true
+	    else
+	      true
+	    endif;
+	      
+	    if rel_link_right.participation = eer::CompletenessType::TOTAL then
+	      element_attribute_to_fk(relationship.name+'_'+entity_left.name, entity_left.name, 'false', table_right, entity_left, table_left) or 
+	      element_attribute_compound_to_fk(relationship.name+'_'+entity_left.name, entity_left.name, 'false', table_right, entity_left, table_left) or 
+	      direct_inheritance_to_fk(relationship.name+'_'+entity_left.name, entity_left.name, 'false', table_left, entity_left, table_right) or
+	      weak_entity_to_fk(relationship.name+'_'+entity_left.name, entity_left.name, 'false', table_left, entity_left, table_right) or 
+	      specialized_inheritance_to_fk(relationship.name+'_'+entity_left.name, entity_left.name, 'false', table_left, entity_left, table_right) or	    
+	      associative_entity_1_1_to_fk(relationship.name+'_'+entity_left.name, entity_left.name, 'false', table_left, entity_left, table_right) or
+	      associative_entity_1_N_to_fk(relationship.name+'_'+entity_left.name, entity_left.name, 'false', table_left, entity_left, table_right) or
+	      associative_entity_N_N_to_fk(relationship.name+'_'+entity_left.name, entity_left.name, 'false', table_left, entity_left, table_right) or
+	      associative_entity_nary_to_fk(relationship.name+'_'+entity_left.name, entity_left.name, 'false', table_left, entity_left, table_right) or true
+	    else
+	      element_attribute_to_fk(relationship.name+'_'+entity_left.name, entity_left.name, 'true', table_right, entity_left, table_left) or 
+	      element_attribute_compound_to_fk(relationship.name+'_'+entity_left.name, entity_left.name, 'true', table_right, entity_left, table_left) or 
+	      direct_inheritance_to_fk(relationship.name+'_'+entity_left.name, entity_left.name, 'true', table_left, entity_left, table_right) or
+	      weak_entity_to_fk(relationship.name+'_'+entity_left.name, entity_left.name, 'true', table_left, entity_left, table_right) or 
+	      specialized_inheritance_to_fk(relationship.name+'_'+entity_left.name, entity_left.name, 'true', table_left, entity_left, table_right) or	    
+	      associative_entity_1_1_to_fk(relationship.name+'_'+entity_left.name, entity_left.name, 'true', table_left, entity_left, table_right) or
+	      associative_entity_1_N_to_fk(relationship.name+'_'+entity_left.name, entity_left.name, 'true', table_left, entity_left, table_right) or
+	      associative_entity_N_N_to_fk(relationship.name+'_'+entity_left.name, entity_left.name, 'true', table_left, entity_left, table_right) or
+	      associative_entity_nary_to_fk(relationship.name+'_'+entity_left.name, entity_left.name, 'true', table_left, entity_left, table_right) or true
+	    endif;
+      }
+    }
+   
+    top relation binary_relationship_1_N{
+      rel_link_left : eer::RelationshipLink;
+      rel_link_right : eer::RelationshipLink;  
+      entity_left : eer::EntityType;
+      entity_right : eer::EntityType;
+      table_left : relational::BaseTable; 
+	  table_right : relational::BaseTable;
+	  checkonly domain eer relationship : eer::Relationship {
+	  };
+	  enforce domain rdbm fk: relational::ForeignKey {
+	    name = 'FK_'+relationship.name+'_'+table_left.name,
+	    referencedTable = table_left,
+	    baseTable = table_right	
+	  };
+      when{
+        relationship.associativeEntity.oclIsUndefined();
+        relationship.relationshipLink->size()= 2;
+        relationship.relationshipLink->select(x : eer::RelationshipLink | x.cardinality = eer::CardinalityType::ONE)->size()=1;
+        rel_link_right = relationship.relationshipLink->select(x: eer::RelationshipLink | x.cardinality = eer::CardinalityType::MANY )->at(1);      
+        rel_link_left = relationship.relationshipLink->select(x: eer::RelationshipLink | x.cardinality = eer::CardinalityType::ONE )->at(1);
+        entity_left = rel_link_left.source;
+	    entity_right = rel_link_right.source;
+	    (entity_left <> entity_right) = true;
+	    
+	    entity_to_table(entity_left, table_left) or weak_entity_to_table(entity_left, table_left) or 
+        direct_inheritance_to_table(entity_left, table_left) or specialized_inheritance_to_table(entity_left, table_left) or
+        associative_entity_1_1_to_table(entity_left, table_left) or associative_entity_1_N_to_table(entity_left, table_left) or 
+        associative_entity_N_N_to_table(entity_left, table_left) or associative_entity_nary_to_table(entity_left, table_left);
+        
+	    entity_to_table(entity_right, table_right) or weak_entity_to_table(entity_right, table_right) or 
+        direct_inheritance_to_table(entity_right, table_right) or specialized_inheritance_to_table(entity_right, table_right) or
+        associative_entity_1_1_to_table(entity_right, table_right) or associative_entity_1_N_to_table(entity_right, table_right) or
+        associative_entity_N_N_to_table(entity_right, table_right) or associative_entity_nary_to_table(entity_right, table_right);    
+      }
+      where{
+        element_attribute_to_column('', relationship, table_right);
+        element_attribute_compound_to_column('', relationship , table_right);
+        element_attribute_to_table(relationship.name, relationship.name, relationship, table_right, relationship);
+        element_attribute_compound_to_table(relationship.name, relationship.name, relationship, table_right, relationship);
+        
+	    if rel_link_left.participation = eer::CompletenessType::TOTAL then	       
+           trigger_insert(entity_right.name, relationship.name, entity_left, table_left) or
+	       trigger_update_or_delete(entity_left.name, relationship.name, entity_right, table_right) or true
+	    else
+	      true
+	    endif;
+	      
+	    if rel_link_right.participation = eer::CompletenessType::TOTAL then
+	      element_attribute_to_fk(relationship.name+'_'+entity_left.name, entity_left.name, 'false', table_right, entity_left, table_left) or 
+	      element_attribute_compound_to_fk(relationship.name+'_'+entity_left.name, entity_left.name, 'false', table_right, entity_left, table_left) or 
+	      direct_inheritance_to_fk(relationship.name+'_'+entity_left.name, entity_left.name, 'false', table_left, entity_left, table_right) or
+	      weak_entity_to_fk(relationship.name+'_'+entity_left.name, entity_left.name, 'false', table_left, entity_left, table_right) or 
+	      specialized_inheritance_to_fk(relationship.name+'_'+entity_left.name, entity_left.name, 'false', table_left, entity_left, table_right) or	    
+	      associative_entity_1_1_to_fk(relationship.name+'_'+entity_left.name, entity_left.name, 'false', table_left, entity_left, table_right) or
+	      associative_entity_1_N_to_fk(relationship.name+'_'+entity_left.name, entity_left.name, 'false', table_left, entity_left, table_right) or
+	      associative_entity_N_N_to_fk(relationship.name+'_'+entity_left.name, entity_left.name, 'false', table_left, entity_left, table_right) or
+	      associative_entity_nary_to_fk(relationship.name+'_'+entity_left.name, entity_left.name, 'false', table_left, entity_left, table_right) or true
+	    else
+	      element_attribute_to_fk(relationship.name+'_'+entity_left.name, entity_left.name, 'true', table_right, entity_left, table_left) or 
+	      element_attribute_compound_to_fk(relationship.name+'_'+entity_left.name, entity_left.name, 'true', table_right, entity_left, table_left) or 
+	      direct_inheritance_to_fk(relationship.name+'_'+entity_left.name, entity_left.name, 'true', table_left, entity_left, table_right) or
+	      weak_entity_to_fk(relationship.name+'_'+entity_left.name, entity_left.name, 'true', table_left, entity_left, table_right) or 
+	      specialized_inheritance_to_fk(relationship.name+'_'+entity_left.name, entity_left.name, 'true', table_left, entity_left, table_right) or	    
+	      associative_entity_1_1_to_fk(relationship.name+'_'+entity_left.name, entity_left.name, 'true', table_left, entity_left, table_right) or
+	      associative_entity_1_N_to_fk(relationship.name+'_'+entity_left.name, entity_left.name, 'true', table_left, entity_left, table_right) or
+	      associative_entity_N_N_to_fk(relationship.name+'_'+entity_left.name, entity_left.name, 'true', table_left, entity_left, table_right) or
+	      associative_entity_nary_to_fk(relationship.name+'_'+entity_left.name, entity_left.name, 'true', table_left, entity_left, table_right) or true
+	    endif;
+      }
+    }
+    
+    top relation binary_relationship_N_N{
+      rel_link_left : eer::RelationshipLink;
+      rel_link_right : eer::RelationshipLink; 
+      entity_left : eer::EntityType;
+      entity_right : eer::EntityType;
+      table_left : relational::BaseTable; 
+	  table_right : relational::BaseTable;
+	  checkonly domain eer relationship : eer::Relationship {
+	  };
+	  enforce domain rdbm table: relational::BaseTable {
+	    name = relationship.name	
+	  };
+      when{
+        relationship.associativeEntity.oclIsUndefined();
+        relationship.relationshipLink->size()= 2;
+        relationship.relationshipLink->select(x : eer::RelationshipLink | x.cardinality = eer::CardinalityType::MANY)->size()=2;
+        rel_link_left = relationship.relationshipLink->select(x: eer::RelationshipLink | x.cardinality = eer::CardinalityType::MANY )->at(1);
+        rel_link_right = relationship.relationshipLink->select(x: eer::RelationshipLink | x.cardinality = eer::CardinalityType::MANY)->at(2);
+        entity_left = rel_link_left.source;
+	    entity_right = rel_link_right.source;
+	    entity_left <> entity_right;
+	    entity_to_table(entity_left, table_left) or weak_entity_to_table(entity_left, table_left) or 
+        direct_inheritance_to_table(entity_left, table_left) or specialized_inheritance_to_table(entity_left, table_left) or
+        associative_entity_1_1_to_table(entity_left, table_left) or associative_entity_1_N_to_table(entity_left, table_left) or
+        associative_entity_N_N_to_table(entity_left, table_left) or associative_entity_nary_to_table(entity_left, table_left);    
+	    entity_to_table(entity_right, table_right) or weak_entity_to_table(entity_right, table_right) or 
+        direct_inheritance_to_table(entity_right, table_right) or specialized_inheritance_to_table(entity_right, table_right) or
+        associative_entity_1_1_to_table(entity_right, table_right) or associative_entity_1_N_to_table(entity_right, table_right) or
+        associative_entity_N_N_to_table(entity_right, table_right) or associative_entity_nary_to_table(entity_right, table_right);       
+      }
+      where{
+        element_attribute_to_column('', relationship, table);
+        element_attribute_compound_to_column('', relationship , table);
+        element_attribute_to_table(relationship.name, relationship.name, relationship, table, relationship);
+        element_attribute_compound_to_table(relationship.name, relationship.name, relationship, table, relationship);
+        
+        element_attribute_to_pk(relationship.name+'_'+entity_left.name+'_', relationship.name, entity_left, table);
+        element_attribute_to_fk(relationship.name+'_'+entity_left.name, entity_left.name, 'false', table, entity_left, table_left); 
+	    element_attribute_compound_to_pk(relationship.name+'_'+entity_left.name+'_', relationship.name, entity_left, table);
+	    element_attribute_compound_to_fk(relationship.name+'_'+entity_left.name, entity_left.name, 'false', table, entity_left, table_left); 
+	    direct_inheritance_to_pk(relationship.name+'_'+entity_left.name, relationship.name, entity_left, table);
+	    direct_inheritance_to_fk(relationship.name+'_'+entity_left.name, entity_left.name, 'false', table_left, entity_left, table); 
+	    weak_entity_to_pk(relationship.name+'_'+entity_left.name, relationship.name, entity_left, table);
+	    weak_entity_to_fk(relationship.name+'_'+entity_left.name, entity_left.name, 'false', table_left, entity_left, table); 
+	    specialized_inheritance_to_pk(relationship.name+'_'+entity_left.name, relationship.name, entity_left, table);
+	    specialized_inheritance_to_fk(relationship.name+'_'+entity_left.name, entity_left.name, 'false', table_left, entity_left, table);
+	    associative_entity_1_1_to_pk(relationship.name+'_'+entity_left.name, relationship.name, entity_left, table);
+	    associative_entity_1_1_to_fk(relationship.name+'_'+entity_left.name, entity_left.name, 'false', table_left, entity_left, table);
+	    associative_entity_1_N_to_pk(relationship.name+'_'+entity_left.name, relationship.name, entity_left, table);
+	    associative_entity_1_N_to_fk(relationship.name+'_'+entity_left.name, entity_left.name, 'false', table_left, entity_left, table);
+	    associative_entity_N_N_to_pk(relationship.name+'_'+entity_left.name, relationship.name, entity_left, table);
+	    associative_entity_N_N_to_fk(relationship.name+'_'+entity_left.name, entity_left.name, 'false', table_left, entity_left, table);
+	    associative_entity_nary_to_pk(relationship.name+'_'+entity_left.name, relationship.name, entity_left, table);
+	    associative_entity_nary_to_fk(relationship.name+'_'+entity_left.name, entity_left.name, 'false', table_left, entity_left, table);
+	    
+	    //RIGHT
+	    element_attribute_to_pk(relationship.name+'_'+entity_right.name+'_', relationship.name, entity_right, table);
+	    element_attribute_to_fk(relationship.name+'_'+entity_right.name, entity_right.name, 'false', table, entity_right, table_right); 
+	    element_attribute_compound_to_pk(relationship.name+'_'+entity_right.name+'_', relationship.name, entity_right, table);
+	    element_attribute_compound_to_fk(relationship.name+'_'+entity_right.name, entity_right.name, 'false', table, entity_right, table_right);
+	    direct_inheritance_to_pk(relationship.name+'_'+entity_right.name, relationship.name, entity_right, table);
+	    direct_inheritance_to_fk(relationship.name+'_'+entity_right.name, entity_right.name, 'false', table_right, entity_right, table); 
+	    weak_entity_to_pk(relationship.name+'_'+entity_right.name, relationship.name, entity_right, table);
+	    weak_entity_to_fk(relationship.name+'_'+entity_right.name, entity_right.name, 'false', table_right, entity_right, table); 
+	    specialized_inheritance_to_pk(relationship.name+'_'+entity_right.name, relationship.name, entity_right, table);
+	    specialized_inheritance_to_fk(relationship.name+'_'+entity_right.name, entity_right.name, 'false', table_right, entity_right, table);
+	    associative_entity_1_1_to_pk(relationship.name+'_'+entity_right.name, relationship.name, entity_right, table);
+	    associative_entity_1_1_to_fk(relationship.name+'_'+entity_right.name, entity_right.name, 'false', table_right, entity_right, table);
+	    associative_entity_1_N_to_pk(relationship.name+'_'+entity_right.name, relationship.name, entity_right, table);
+	    associative_entity_1_N_to_fk(relationship.name+'_'+entity_right.name, entity_right.name, 'false', table_right, entity_right, table);
+	    associative_entity_N_N_to_pk(relationship.name+'_'+entity_right.name, relationship.name, entity_right, table);
+	    associative_entity_N_N_to_fk(relationship.name+'_'+entity_right.name, entity_right.name, 'false', table_right, entity_right, table);
+	    associative_entity_nary_to_pk(relationship.name+'_'+entity_right.name, relationship.name, entity_right, table);
+	    associative_entity_nary_to_fk(relationship.name+'_'+entity_right.name, entity_left.name, 'false', table_right, entity_right, table);
+	    
+	    if rel_link_left.participation = eer::CompletenessType::TOTAL then
+	       trigger_insert(relationship.name, relationship.name, entity_left, table_left) or 
+	       trigger_update_or_delete(entity_left.name, relationship.name, relationship, table) or true
+	    else
+	      true
+	    endif;  
+	    if rel_link_right.participation = eer::CompletenessType::TOTAL then
+	       trigger_insert(relationship.name, relationship.name, entity_right, table_right) or
+	       trigger_update_or_delete(entity_right.name, relationship.name, relationship, table) or true
+	    else
+	      true
+	    endif;
+      }
+    }
+    
+    top relation unary_relationship_1_1{
+      rel_link_left : eer::RelationshipLink;
+      rel_link_right : eer::RelationshipLink;  
+      entity_left : eer::EntityType;
+      entity_right : eer::EntityType;
+      table_left : relational::BaseTable; 
+	  table_right : relational::BaseTable;
+	  checkonly domain eer relationship : eer::Relationship {
+	  };
+	  enforce domain rdbm fk: relational::ForeignKey {
+	    name = 'FK_'+relationship.name+'_'+table_left.name,
+	    referencedTable = table_left,
+	    baseTable = table_right	
+	  };
+      when{
+        relationship.associativeEntity.oclIsUndefined();
+        relationship.relationshipLink->size()= 2;
+        relationship.relationshipLink->select(x : eer::RelationshipLink | x.cardinality = eer::CardinalityType::ONE)->size()=2;
+        rel_link_right = relationship.relationshipLink->select(x: eer::RelationshipLink | x.attributeToHere = true )->at(1);      
+        rel_link_left = relationship.relationshipLink->select(x: eer::RelationshipLink | x <> rel_link_right )->at(1);
+        entity_left = rel_link_left.source;
+	    entity_right = rel_link_right.source;
+	    entity_left = entity_right;
+	    entity_to_table(entity_left, table_left) or weak_entity_to_table(entity_left, table_left) or 
+        direct_inheritance_to_table(entity_left, table_left) or specialized_inheritance_to_table(entity_left, table_left) or
+        associative_entity_1_1_to_table(entity_left, table_left) or associative_entity_1_N_to_table(entity_left, table_left) or 
+        associative_entity_N_N_to_table(entity_left, table_left) or associative_entity_nary_to_table(entity_left, table_left);
+	    entity_to_table(entity_right, table_right) or weak_entity_to_table(entity_right, table_right) or 
+        direct_inheritance_to_table(entity_right, table_right) or specialized_inheritance_to_table(entity_right, table_right) or
+        associative_entity_1_1_to_table(entity_right, table_right) or associative_entity_1_N_to_table(entity_right, table_right) or
+        associative_entity_N_N_to_table(entity_right, table_right) or associative_entity_nary_to_table(entity_right, table_right);    
+      }
+      where{
+        element_attribute_to_column('', relationship, table_right);
+        element_attribute_compound_to_column('', relationship , table_right);
+        element_attribute_to_table(relationship.name, relationship.name, relationship, table_right, relationship);
+        element_attribute_compound_to_table(relationship.name, relationship.name, relationship, table_right, relationship);
+        
+        //LEFT
+        element_attribute_to_unique(relationship.name+'_'+entity_left.name+'_', relationship.name, entity_left, table_right);
+	    element_attribute_compound_to_unique(relationship.name+'_'+entity_left.name+'_', relationship.name, entity_left, table_right);
+	    direct_inheritance_to_unique(relationship.name+'_'+entity_left.name, relationship.name, entity_left, table_right);
+	    weak_entity_to_unique(relationship.name+'_'+entity_left.name, relationship.name, entity_left, table_right);
+	    specialized_inheritance_to_unique(relationship.name+'_'+entity_left.name, relationship.name, entity_left, table_right);
+	    associative_entity_1_1_to_unique(relationship.name+'_'+entity_left.name, relationship.name, entity_left, table_right);
+	    associative_entity_1_N_to_unique(relationship.name+'_'+entity_left.name, relationship.name, entity_left, table_right);
+	    associative_entity_N_N_to_unique(relationship.name+'_'+entity_left.name, relationship.name, entity_left, table_right);
+	    associative_entity_nary_to_unique(relationship.name+'_'+entity_left.name, relationship.name, entity_left, table_right);
+
+	    if rel_link_right.participation = eer::CompletenessType::TOTAL then
+	      element_attribute_to_fk(relationship.name+'_'+entity_left.name, entity_left.name, 'false', table_right, entity_left, table_left) or 
+	      element_attribute_compound_to_fk(relationship.name+'_'+entity_left.name, entity_left.name, 'false', table_right, entity_left, table_left) or 
+	      direct_inheritance_to_fk(relationship.name+'_'+entity_left.name, entity_left.name, 'false', table_left, entity_left, table_right) or
+	      weak_entity_to_fk(relationship.name+'_'+entity_left.name, entity_left.name, 'false', table_left, entity_left, table_right) or 
+	      specialized_inheritance_to_fk(relationship.name+'_'+entity_left.name, entity_left.name, 'false', table_left, entity_left, table_right) or	    
+	      associative_entity_1_1_to_fk(relationship.name+'_'+entity_left.name, entity_left.name, 'false', table_left, entity_left, table_right) or
+	      associative_entity_1_N_to_fk(relationship.name+'_'+entity_left.name, entity_left.name, 'false', table_left, entity_left, table_right) or
+	      associative_entity_N_N_to_fk(relationship.name+'_'+entity_left.name, entity_left.name, 'false', table_left, entity_left, table_right) or
+	      associative_entity_nary_to_fk(relationship.name+'_'+entity_left.name, entity_left.name, 'false', table_left, entity_left, table_right) or true
+	    else
+	      element_attribute_to_fk(relationship.name+'_'+entity_left.name, entity_left.name, 'true', table_right, entity_left, table_left) or 
+	      element_attribute_compound_to_fk(relationship.name+'_'+entity_left.name, entity_left.name, 'true', table_right, entity_left, table_left) or 
+	      direct_inheritance_to_fk(relationship.name+'_'+entity_left.name, entity_left.name, 'true', table_left, entity_left, table_right) or
+	      weak_entity_to_fk(relationship.name+'_'+entity_left.name, entity_left.name, 'true', table_left, entity_left, table_right) or 
+	      specialized_inheritance_to_fk(relationship.name+'_'+entity_left.name, entity_left.name, 'true', table_left, entity_left, table_right) or	    
+	      associative_entity_1_1_to_fk(relationship.name+'_'+entity_left.name, entity_left.name, 'true', table_left, entity_left, table_right) or
+	      associative_entity_1_N_to_fk(relationship.name+'_'+entity_left.name, entity_left.name, 'true', table_left, entity_left, table_right) or
+	      associative_entity_N_N_to_fk(relationship.name+'_'+entity_left.name, entity_left.name, 'true', table_left, entity_left, table_right) or
+	      associative_entity_nary_to_fk(relationship.name+'_'+entity_left.name, entity_left.name, 'true', table_left, entity_left, table_right) or true
+	    endif;
+      }
+    }
+    
+    top relation unary_relationship_1_N{
+      rel_link_left : eer::RelationshipLink;
+      rel_link_right : eer::RelationshipLink;  
+      entity_left : eer::EntityType;
+      entity_right : eer::EntityType;
+      table_left : relational::BaseTable; 
+	  table_right : relational::BaseTable;
+	  checkonly domain eer relationship : eer::Relationship {
+	  };
+	  enforce domain rdbm fk: relational::ForeignKey {
+	    name = 'FK_'+relationship.name+'_'+table_left.name,
+	    referencedTable = table_left,
+	    baseTable = table_right	
+	  };
+      when{
+        relationship.associativeEntity.oclIsUndefined();
+        relationship.relationshipLink->size()= 2;
+        relationship.relationshipLink->select(x : eer::RelationshipLink | x.cardinality = eer::CardinalityType::ONE)->size()=1;
+        rel_link_right = relationship.relationshipLink->select(x : eer::RelationshipLink | x.cardinality = eer::CardinalityType::MANY )->at(1);      
+        rel_link_left = relationship.relationshipLink->select(x : eer::RelationshipLink | x.cardinality = eer::CardinalityType::ONE )->at(1);
+        entity_left = rel_link_left.source;
+	    entity_right = rel_link_right.source;
+	    (entity_left = entity_right) = true;
+	    entity_to_table(entity_left, table_left) or weak_entity_to_table(entity_left, table_left) or 
+        direct_inheritance_to_table(entity_left, table_left) or specialized_inheritance_to_table(entity_left, table_left) or
+        associative_entity_1_1_to_table(entity_left, table_left) or associative_entity_1_N_to_table(entity_left, table_left) or 
+        associative_entity_N_N_to_table(entity_left, table_left) or associative_entity_nary_to_table(entity_left, table_left);
+	    entity_to_table(entity_right, table_right) or weak_entity_to_table(entity_right, table_right) or 
+        direct_inheritance_to_table(entity_right, table_right) or specialized_inheritance_to_table(entity_right, table_right) or
+        associative_entity_1_1_to_table(entity_right, table_right) or associative_entity_1_N_to_table(entity_right, table_right) or
+        associative_entity_N_N_to_table(entity_right, table_right) or associative_entity_nary_to_table(entity_right, table_right);    
+      }
+      where{
+        element_attribute_to_column('', relationship, table_right);
+        element_attribute_compound_to_column('', relationship , table_right);
+        element_attribute_to_table(relationship.name, relationship.name, relationship, table_right, relationship);
+        element_attribute_compound_to_table(relationship.name, relationship.name, relationship, table_right, relationship);
+
+
+	  
+	    if rel_link_right.participation = eer::CompletenessType::TOTAL then
+	      element_attribute_to_fk(relationship.name+'_'+entity_left.name, entity_left.name, 'false', table_right, entity_left, table_left) or 
+	      element_attribute_compound_to_fk(relationship.name+'_'+entity_left.name, entity_left.name, 'false', table_right, entity_left, table_left) or 
+	      direct_inheritance_to_fk(relationship.name+'_'+entity_left.name, entity_left.name, 'false', table_left, entity_left, table_right) or
+	      weak_entity_to_fk(relationship.name+'_'+entity_left.name, entity_left.name, 'false', table_left, entity_left, table_right) or 
+	      specialized_inheritance_to_fk(relationship.name+'_'+entity_left.name, entity_left.name, 'false', table_left, entity_left, table_right) or	    
+	      associative_entity_1_1_to_fk(relationship.name+'_'+entity_left.name, entity_left.name, 'false', table_left, entity_left, table_right) or
+	      associative_entity_1_N_to_fk(relationship.name+'_'+entity_left.name, entity_left.name, 'false', table_left, entity_left, table_right) or
+	      associative_entity_N_N_to_fk(relationship.name+'_'+entity_left.name, entity_left.name, 'false', table_left, entity_left, table_right) or
+	      associative_entity_nary_to_fk(relationship.name+'_'+entity_left.name, entity_left.name, 'false', table_left, entity_left, table_right) or true
+	    else
+	      element_attribute_to_fk(relationship.name+'_'+entity_left.name, entity_left.name, 'true', table_right, entity_left, table_left) or 
+	      element_attribute_compound_to_fk(relationship.name+'_'+entity_left.name, entity_left.name, 'true', table_right, entity_left, table_left) or 
+	      direct_inheritance_to_fk(relationship.name+'_'+entity_left.name, entity_left.name, 'true', table_left, entity_left, table_right) or
+	      weak_entity_to_fk(relationship.name+'_'+entity_left.name, entity_left.name, 'true', table_left, entity_left, table_right) or 
+	      specialized_inheritance_to_fk(relationship.name+'_'+entity_left.name, entity_left.name, 'true', table_left, entity_left, table_right) or	    
+	      associative_entity_1_1_to_fk(relationship.name+'_'+entity_left.name, entity_left.name, 'true', table_left, entity_left, table_right) or
+	      associative_entity_1_N_to_fk(relationship.name+'_'+entity_left.name, entity_left.name, 'true', table_left, entity_left, table_right) or
+	      associative_entity_N_N_to_fk(relationship.name+'_'+entity_left.name, entity_left.name, 'true', table_left, entity_left, table_right) or
+	      associative_entity_nary_to_fk(relationship.name+'_'+entity_left.name, entity_left.name, 'true', table_left, entity_left, table_right) or true
+	    endif;
+      }
+    }
+    
+    top relation unary_relationship_N_N{
+      rel_link_left : eer::RelationshipLink;
+      rel_link_right : eer::RelationshipLink; 
+      entity_left : eer::EntityType;
+      entity_right : eer::EntityType;
+      table_left : relational::BaseTable; 
+	  table_right : relational::BaseTable;
+	  checkonly domain eer relationship : eer::Relationship {
+	  };
+	  enforce domain rdbm table: relational::BaseTable {
+	    name = relationship.name	
+	  };
+      when{
+        relationship.associativeEntity.oclIsUndefined();
+        relationship.relationshipLink->size()= 2;
+        relationship.relationshipLink->select(x : eer::RelationshipLink | x.cardinality = eer::CardinalityType::MANY)->size()=2;
+        rel_link_left = relationship.relationshipLink->select(x: eer::RelationshipLink | x.cardinality = eer::CardinalityType::MANY )->at(1);
+        rel_link_right = relationship.relationshipLink->select(x: eer::RelationshipLink | x.cardinality = eer::CardinalityType::MANY)->at(2);
+        entity_left = rel_link_left.source;
+	    entity_right = rel_link_right.source;
+	    entity_left = entity_right;
+	    entity_to_table(entity_left, table_left) or weak_entity_to_table(entity_left, table_left) or 
+        direct_inheritance_to_table(entity_left, table_left) or specialized_inheritance_to_table(entity_left, table_left) or
+        associative_entity_1_1_to_table(entity_left, table_left) or associative_entity_1_N_to_table(entity_left, table_left) or
+        associative_entity_N_N_to_table(entity_left, table_left) or associative_entity_nary_to_table(entity_left, table_left);    
+	    entity_to_table(entity_right, table_right) or weak_entity_to_table(entity_right, table_right) or 
+        direct_inheritance_to_table(entity_right, table_right) or specialized_inheritance_to_table(entity_right, table_right) or
+        associative_entity_1_1_to_table(entity_right, table_right) or associative_entity_1_N_to_table(entity_right, table_right) or
+        associative_entity_N_N_to_table(entity_right, table_right) or associative_entity_nary_to_table(entity_right, table_right);       
+      }
+      where{
+        element_attribute_to_column('', relationship, table);
+        element_attribute_compound_to_column('', relationship , table);
+        element_attribute_to_table(relationship.name, relationship.name, relationship, table, relationship);
+        element_attribute_compound_to_table(relationship.name, relationship.name, relationship, table, relationship);
+        
+        element_attribute_to_pk(relationship.name+'_'+entity_left.name+'_'+rel_link_left.role+'_', relationship.name, entity_left, table);
+        element_attribute_to_fk(relationship.name+'_'+entity_left.name+'_'+rel_link_left.role, entity_left.name, 'false', table, entity_left, table_left); 
+	    element_attribute_compound_to_pk(relationship.name+'_'+entity_left.name+'_'+rel_link_left.role+'_', relationship.name, entity_left, table);
+	    element_attribute_compound_to_fk(relationship.name+'_'+entity_left.name+'_'+rel_link_left.role, entity_left.name, 'false', table, entity_left, table_left); 
+	    direct_inheritance_to_pk(relationship.name+'_'+entity_left.name+'_'+rel_link_left.role, relationship.name, entity_left, table);
+	    direct_inheritance_to_fk(relationship.name+'_'+entity_left.name+'_'+rel_link_left.role, entity_left.name, 'false', table_left, entity_left, table); 
+	    weak_entity_to_pk(relationship.name+'_'+entity_left.name+'_'+rel_link_left.role, relationship.name, entity_left, table);
+	    weak_entity_to_fk(relationship.name+'_'+entity_left.name+'_'+rel_link_left.role, entity_left.name, 'false', table_left, entity_left, table); 
+	    specialized_inheritance_to_pk(relationship.name+'_'+entity_left.name+'_'+rel_link_left.role, relationship.name, entity_left, table);
+	    specialized_inheritance_to_fk(relationship.name+'_'+entity_left.name+'_'+rel_link_left.role, entity_left.name, 'false', table_left, entity_left, table);
+	    associative_entity_1_1_to_pk(relationship.name+'_'+entity_left.name+'_'+rel_link_left.role, relationship.name, entity_left, table);
+	    associative_entity_1_1_to_fk(relationship.name+'_'+entity_left.name+'_'+rel_link_left.role, entity_left.name, 'false', table_left, entity_left, table);
+	    associative_entity_1_N_to_pk(relationship.name+'_'+entity_left.name+'_'+rel_link_left.role, relationship.name, entity_left, table);
+	    associative_entity_1_N_to_fk(relationship.name+'_'+entity_left.name+'_'+rel_link_left.role, entity_left.name, 'false', table_left, entity_left, table);
+	    associative_entity_N_N_to_pk(relationship.name+'_'+entity_left.name+'_'+rel_link_left.role, relationship.name, entity_left, table);
+	    associative_entity_N_N_to_fk(relationship.name+'_'+entity_left.name+'_'+rel_link_left.role, entity_left.name, 'false', table_left, entity_left, table);
+	    associative_entity_nary_to_pk(relationship.name+'_'+entity_left.name+'_'+rel_link_left.role, relationship.name, entity_left, table);
+	    associative_entity_nary_to_fk(relationship.name+'_'+entity_left.name+'_'+rel_link_left.role, entity_left.name, 'false', table_left, entity_left, table);
+	    
+	    //RIGHT
+	    element_attribute_to_pk(relationship.name+'_'+entity_right.name+'_'+rel_link_right.role+'_', relationship.name, entity_right, table);
+	    element_attribute_to_fk(relationship.name+'_'+entity_right.name+'_'+rel_link_right.role, entity_right.name, 'false', table, entity_right, table_right); 
+	    element_attribute_compound_to_pk(relationship.name+'_'+entity_right.name+'_'+rel_link_right.role+'_', relationship.name, entity_right, table);
+	    element_attribute_compound_to_fk(relationship.name+'_'+entity_right.name+'_'+rel_link_right.role, entity_right.name, 'false', table, entity_right, table_right);
+	    direct_inheritance_to_pk(relationship.name+'_'+entity_right.name+'_'+rel_link_right.role, relationship.name, entity_right, table);
+	    direct_inheritance_to_fk(relationship.name+'_'+entity_right.name+'_'+rel_link_right.role, entity_right.name, 'false', table_right, entity_right, table); 
+	    weak_entity_to_pk(relationship.name+'_'+entity_right.name+'_'+rel_link_right.role, relationship.name, entity_right, table);
+	    weak_entity_to_fk(relationship.name+'_'+entity_right.name+'_'+rel_link_right.role, entity_right.name, 'false', table_right, entity_right, table); 
+	    specialized_inheritance_to_pk(relationship.name+'_'+entity_right.name+'_'+rel_link_right.role, relationship.name, entity_right, table);
+	    specialized_inheritance_to_fk(relationship.name+'_'+entity_right.name+'_'+rel_link_right.role, entity_right.name, 'false', table_right, entity_right, table);
+	    associative_entity_1_1_to_pk(relationship.name+'_'+entity_right.name+'_'+rel_link_right.role, relationship.name, entity_right, table);
+	    associative_entity_1_1_to_fk(relationship.name+'_'+entity_right.name+'_'+rel_link_right.role, entity_right.name, 'false', table_right, entity_right, table);
+	    associative_entity_1_N_to_pk(relationship.name+'_'+entity_right.name+'_'+rel_link_right.role, relationship.name, entity_right, table);
+	    associative_entity_1_N_to_fk(relationship.name+'_'+entity_right.name+'_'+rel_link_right.role, entity_right.name, 'false', table_right, entity_right, table);
+	    associative_entity_N_N_to_pk(relationship.name+'_'+entity_right.name+'_'+rel_link_right.role, relationship.name, entity_right, table);
+	    associative_entity_N_N_to_fk(relationship.name+'_'+entity_right.name+'_'+rel_link_right.role, entity_right.name, 'false', table_right, entity_right, table);
+	    associative_entity_nary_to_pk(relationship.name+'_'+entity_right.name+'_'+rel_link_right.role, relationship.name, entity_right, table);
+	    associative_entity_nary_to_fk(relationship.name+'_'+entity_right.name+'_'+rel_link_right.role, entity_left.name, 'false', table_right, entity_right, table);
+	    
+	    if rel_link_left.participation = eer::CompletenessType::TOTAL then
+	       trigger_insert(relationship.name, relationship.name+'_'+rel_link_left.role, entity_left, table_left) or 
+	       trigger_update_or_delete(entity_left.name, relationship.name+'_'+rel_link_left.role, relationship, table) or true
+	    else
+	      true
+	    endif;  
+	    
+	    if rel_link_right.participation = eer::CompletenessType::TOTAL then
+	       trigger_insert(relationship.name, relationship.name+'_'+rel_link_right.role, entity_right, table_right) or
+	       trigger_update_or_delete(entity_right.name, relationship.name+'_'+rel_link_right.role, relationship, table) or true
+	    else
+	      true
+	    endif;
+      }
+    }
+    
+	top relation specialized_category_to_fk{
+      table_left : relational::BaseTable; 
+	  table_right : relational::BaseTable;
+	  checkonly domain eer category_GL : eer::CategoryGL{
+	      source = entity_right : eer::Entity {},
+	      target = category : eer::Category {
+	        categorySL = category_SL : eer::CategorySL{
+	          source = entity_left : eer::Entity{}
+	        }
+	      }
+	  };
+	  enforce domain rdbm fk: relational::ForeignKey {
+	    name = 'FK_'+entity_left.name+'_'+entity_right.name,
+	    referencedTable = table_left,
+	    baseTable = table_right	
+	  };
+      when{
+        entity_to_table(entity_left, table_left) or weak_entity_to_table(entity_left, table_left) or 
+        direct_inheritance_to_table(entity_left, table_left) or specialized_inheritance_to_table(entity_left, table_left);  
+        entity_to_table(entity_right, table_right) or weak_entity_to_table(entity_right, table_right) or 
+        direct_inheritance_to_table(entity_right, table_right) or specialized_inheritance_to_table(entity_right, table_right);
+        }
+      where{
+      	if category_GL.completeness = eer::CompletenessType::TOTAL then
+	      element_attribute_to_fk(entity_left.name+'_'+entity_right.name, entity_left.name, 'false', table_right, entity_left, table_left) or 
+	      element_attribute_compound_to_fk(entity_left.name+'_'+entity_right.name, entity_left.name, 'false', table_right, entity_left, table_left) or 
+	      weak_entity_to_fk(entity_left.name+'_'+entity_right.name, entity_left.name, 'false', table_left , entity_left , table_right) or
+	      direct_inheritance_to_fk(entity_left.name+'_'+entity_right.name, entity_left.name, 'false', table_left ,entity_left, table_right) or
+          specialized_inheritance_to_fk(entity_left.name+'_'+entity_right.name, entity_left.name, 'false', table_left ,entity_left, table_right) or true
+      	else
+	      element_attribute_to_fk(entity_left.name+'_'+entity_right.name, entity_left.name, 'true', table_right, entity_left, table_left) or 
+	      element_attribute_compound_to_fk(entity_left.name+'_'+entity_right.name, entity_left.name, 'true', table_right, entity_left, table_left) or 
+	      weak_entity_to_fk(entity_left.name+'_'+entity_right.name, entity_left.name, 'true', table_left , entity_left , table_right) or
+	      direct_inheritance_to_fk(entity_left.name+'_'+entity_right.name, entity_left.name, 'true', table_left ,entity_left, table_right) or
+          specialized_inheritance_to_fk(entity_left.name+'_'+entity_right.name, entity_left.name, 'true', table_left ,entity_left, table_right) or true
+      	endif;
+      }
+    }
+    
+    relation trigger_insert {
+	  primitive domain table_name : String;
+	  primitive domain relationship_name : String;
+	  checkonly domain eer e :eer::Element{};
+	  enforce domain rdbm table : relational::BaseTable {
+	    //name = e.name,
+	    triggers = t : relational::Trigger {
+	      name = 'TRG_'+relationship_name+'_'+e.name,
+	      insertType = true,
+	      deleteType = false,
+	      updateType = false,
+	      actionTime = relational::ActionTimeType::AFTER,
+            triggerTables = tt : relational::BaseTable {
+              name = table_name
+          }
+	    }
+	  };
+	}
+	
+	relation trigger_update_or_delete{
+	  primitive domain table_name : String;
+	  primitive domain relationship_name : String;
+	  checkonly domain eer e :eer::Element{};
+	  enforce domain rdbm table : relational::BaseTable {
+	    //name = e.name,
+	    triggers = t : relational::Trigger {
+          name = 'TRG_'+relationship_name+'_'+e.name,
+          insertType = false,
+          updateType = true,
+          deleteType = true,
+          actionTime = relational::ActionTimeType::AFTER,
+          triggerTables = tt : relational::BaseTable {
+            name = table_name
+          }
+        }
+	  };
+	}
+
+	relation trigger_inheritance_insert {
+	  primitive domain table_name : String;
+	  primitive domain relationship_name : String;
+	  checkonly domain eer e :eer::Element{};
+	  enforce domain rdbm table : relational::BaseTable {
+	    //name = e.name,
+	    triggers = t : relational::Trigger {
+	      name = 'TRG_'+relationship_name+'_'+e.name,
+	      insertType = true,
+	      deleteType = false,
+	      updateType = false,
+	      actionTime = relational::ActionTimeType::BEFORE,
+            triggerTables = tt : relational::BaseTable {
+              name = table_name
+          }
+	    }
+	  };
+	}
+	
+    relation trigger_inheritance_overl_total {
+	  primitive domain table_name : String;
+	  primitive domain relationship_name : String;
+	  checkonly domain eer e :eer::Element{};
+	  enforce domain rdbm table : relational::BaseTable {
+	    //name = e.name,
+	    triggers = t : relational::Trigger {
+	      name = 'TRG_'+relationship_name+'_'+e.name,
+	      insertType = true,
+	      deleteType = false,
+	      updateType = true,
+	      actionTime = relational::ActionTimeType::BEFORE,
+            triggerTables = tt : relational::BaseTable {
+              name = table_name
+          }
+	    }
+	  };
+	}
+	
+	relation trigger_inheritance_insert_delete {
+	  primitive domain table_name : String;
+	  primitive domain relationship_name : String;
+	  checkonly domain eer e :eer::Element{};
+	  enforce domain rdbm table : relational::BaseTable {
+	    //name = e.name,
+	    triggers = t : relational::Trigger {
+	      name = 'TRG_'+relationship_name+'_'+e.name,
+	      insertType = true,
+	      deleteType = true,
+	      updateType = false,
+	      actionTime = relational::ActionTimeType::BEFORE,
+            triggerTables = tt : relational::BaseTable {
+              name = table_name
+          }
+	    }
+	  };
+	}
+	
+	relation trigger_inheritance_insert_delete_2 {
+	  primitive domain table_name : String;
+	  primitive domain relationship_name : String;
+	  checkonly domain eer e :eer::Element{};
+	  enforce domain rdbm table : relational::BaseTable {
+	    //name = e.name,
+	    triggers = t : relational::Trigger {
+	      name = 'TRG_'+relationship_name+'_'+e.name,
+	      insertType = true,
+	      deleteType = true,
+	      updateType = true,
+	      actionTime = relational::ActionTimeType::INSTEADOF,
+            triggerTables = tt : relational::BaseTable {
+              name = table_name
+          }
+	    }
+	  };
+	}
+	
+	relation trigger_inheritance_over_insert_delete {
+	  primitive domain table_name : String;
+	  primitive domain relationship_name : String;
+	  checkonly domain eer e :eer::Element{};
+	  enforce domain rdbm table : relational::BaseTable {
+	    //name = e.name,
+	    triggers = t : relational::Trigger {
+	      name = 'TRG_'+relationship_name+'_'+e.name,
+	      insertType = true,
+	      deleteType = true,
+	      updateType = true,
+	      actionTime = relational::ActionTimeType::BEFORE,
+            triggerTables = tt : relational::BaseTable {
+              name = table_name
+          }
+	    }
+	  };
+	}
+
+	/* Return a relational column type for a correspondent eer attribute type */
+	query getDataType (typename : eer::DataType ) : String {
+	  if typename = eer::DataType::STRING  then 'STRING'
+	  else if typename = eer::DataType::BOOLEAN   then 'BOOLEAN'
+	  else if typename = eer::DataType::TIMESTAMP  then 'TIMESTAMP'
+	  else if typename = eer::DataType::FLOAT  then 'FLOAT'
+	  else if typename = eer::DataType::INTEGER then 'INTEGER'
+	  else if typename = eer::DataType::CLOB then 'CLOB'
+	  else if typename = eer::DataType::BLOB then 'BLOB' 
+	  else 'NULL' endif endif endif endif endif endif endif
+	}	
+	
+}	

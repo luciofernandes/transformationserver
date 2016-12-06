@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<beans xmlns="http://www.springframework.org/schema/beans"
+	xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:context="http://www.springframework.org/schema/context"
+	xmlns:mvc="http://www.springframework.org/schema/mvc" xmlns:security="http://www.springframework.org/schema/security"
+	xsi:schemaLocation="http://www.springframework.org/schema/mvc
+http://www.springframework.org/schema/mvc/spring-mvc.xsd
+http://www.springframework.org/schema/security
+http://www.springframework.org/schema/security/spring-security.xsd
+http://www.springframework.org/schema/beans
+http://www.springframework.org/schema/beans/spring-beans.xsd
+http://www.springframework.org/schema/context
+http://www.springframework.org/schema/context/spring-context.xsd">
+
+	<security:http auto-config="true">
+    	<security:intercept-url pattern="/login*" access="IS_AUTHENTICATED_ANONYMOUSLY"/>
+		<security:intercept-url pattern="/resource/**" access="IS_AUTHENTICATED_ANONYMOUSLY"/>
+		<security:intercept-url pattern="/transformation/execute*" access="IS_AUTHENTICATED_ANONYMOUSLY"/>
+		<security:intercept-url pattern="/**" access="ROLE_USER" />
+		<security:form-login  login-page="/login" default-target-url="/" authentication-failure-url="/loginfailed" />
+		<security:logout logout-url="/logout" logout-success-url="/login" delete-cookies="JSESSIONID" />
+		<security:remember-me key="uniqueAndSecret"/>
+	</security:http>
+	
+	<!--
+	<security:authentication-manager>
+		<security:authentication-provider>
+			<security:user-service>
+				<security:user name="admin@teste.com" password="admin123" authorities="ROLE_USER" />
+			</security:user-service>
+		</security:authentication-provider>
+	</security:authentication-manager>
+	-->
+	<security:authentication-manager>
+		<security:authentication-provider user-service-ref="authenticationService">
+			<security:password-encoder hash="md5"/>
+		</security:authentication-provider>
+	</security:authentication-manager>
+	
+</beans>

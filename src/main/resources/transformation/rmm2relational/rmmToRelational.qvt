@@ -1,0 +1,499 @@
+transformation rmmToRelational(source:rmm, target:relational){
+	key relational::DataType{name};
+    key relational::Column{name, table};
+	key relational::ForeignKey{name};
+	key relational::UniqueConstraint{name};
+	key relational::Trigger{name};
+    key relational::BaseTable{name};
+    key relational::Schema{name};
+    key relational::Assertion{name};
+    key relational::CheckConstraint{name};
+    
+    
+    top relation SchemaRMMToSchemaRelational {
+		schemaName : String;
+		tableName : String;
+		description :String;
+	/*	relatioshipRMM: rmm::Relationship;*/
+		/*checkonly domain source relatioshipRMM : rmm::Relationship {};*/
+		checkonly domain source schemaRMM : rmm::Schema {
+		 	name = schemaName,
+		 	table = tableRMM : rmm::Table {
+		 		name = tableName,
+		 		description = description
+		 	}/*  ,
+		 	relationship 	= relatioshipRMM : rmm::Relationship {}*/
+		};	    
+		
+		enforce domain target schemaRelation :relational::Schema {
+			name = schemaName,
+			tables = tableRelational : relational::BaseTable {
+				name = tableName,
+				description = description
+			}
+		};
+		when {
+			schemaName = if schemaName.oclIsUndefined() then 'fromRMM' else schemaName endif;
+		}
+		where{    					
+			AttributeToColumn(tableRMM,tableRelational);			        			
+        	UniqueRMMTORelation(tableRMM,tableRelational);        	
+			TriggerRMMToRelation(tableRMM,tableRelational);
+			PkRMMToRelation(tableRMM,tableRelational);	
+			CheckRMMTORelation(tableRMM,tableRelational);		  
+		}
+	}
+	
+	top relation relatioshipRMMToRelational {
+		schemaName : String;
+		tableName : String;
+		description :String;
+	
+		checkonly domain source relatioshipRMM : rmm::Relationship {};
+		checkonly domain source schemaRMM : rmm::Schema {
+		 	name = schemaName,
+		 	table = tableRMM : rmm::Table {
+		 		name = tableName
+		 	}
+		};	    
+		
+		enforce domain target schemaRelation :relational::Schema {
+			name = schemaName,
+			tables = tableRelational : relational::BaseTable {
+				name = tableName
+			}
+		};
+		when {
+			schemaName = if schemaName.oclIsUndefined() then 'fromRMM' else schemaName endif;
+		}
+		where{    					
+  			RelationshipToFK(tableRMM.name,relatioshipRMM,tableRMM,tableRelational);
+		}
+	}
+	
+	top relation FkRMMToRelation{
+	    tableName :String;
+		fkName :String;       
+		attributeNullable: Boolean;
+		attributeDefaultValue: String;
+		attributeLength : Integer;
+		attributeName: String;
+		data_type : String;
+		dataTypeRMM:rmm::BaseType;
+        description:String;
+		pkName:String;
+
+        checkonly domain source tableRMM : rmm::Table {
+		  	  name = tableName, 
+		      constraints = fkRMM :  rmm::ForeignKey{
+		      	name = fkName,
+				  attributes = attRMM : rmm::Attribute {
+				          isNotNull = attributeNullable, 
+				          name = attributeName,
+				          defaultValue = attributeDefaultValue,
+				          size = attributeLength,
+				          dataType = dataTypeRMM,
+				          description = description
+				   }
+
+		      }	       
+        };
+          
+       enforce domain target tableRelational : relational::BaseTable {
+          name = tableName, 
+          referencingForeignKeys =  fkRelationa : relational::ForeignKey {
+	          name = fkName,
+	          baseTable = baseTable : relational::BaseTable {
+	          	name = tableRMM.name
+	          },	   	         
+	          members = colIMM :relational::Column {
+		          nullable = attributeNullable, 
+		          name = attributeName,		        
+		          defaultValue = attributeDefaultValue,
+		          length = attributeLength,
+		          table = tableRelational,
+		          description = description,
+		          dataType = dt_rel : relational::DataType{
+		            name = data_type
+		          }
+    		} 
+          }
+        };
+        
+        where {
+        	data_type = getDataType(dataTypeRMM);        	
+        }	
+	}
+	
+	relation AttributeToColumn {
+		attributeNullable: Boolean;
+		attributeDefaultValue: String;
+		attributeLength : Integer;
+		attributeName: String;
+		data_type : String;
+		dataTypeRMM:rmm::BaseType;
+        description:String;
+                
+        checkonly domain source tableRMM : rmm::Table {
+		  attributes = attRMM : rmm::Attribute {
+		          isNotNull = attributeNullable, 
+		          name = attributeName,
+		          defaultValue = attributeDefaultValue,
+		          size = attributeLength,
+		          dataType = dataTypeRMM,
+		          description = description
+		   }
+        };
+        
+       enforce domain target tableRelational : relational::BaseTable {
+          	columns = colIMM :relational::Column {
+		          nullable = attributeNullable, 
+		          name = attributeName,		        
+		          defaultValue = attributeDefaultValue,
+		          length = attributeLength,
+		          table = tableRelational,
+		          description = description,
+		          dataType = dt_rel : relational::DataType{
+		            name = data_type
+		          }
+    		} 
+        };     
+        where {
+        	data_type = getDataType(dataTypeRMM);        	
+        }
+    }
+    
+	relation PkRMMToRelation{
+    	pkName :String;
+		attributeNullable: Boolean;
+		attributeDefaultValue: String;
+		attributeLength : Integer;
+		attributeName: String;
+		data_type : String;
+		dataTypeRMM:rmm::BaseType;
+        tableName:String;
+        description :String;
+        checkonly domain source tableRMM : rmm::Table {
+		  	  name = tableName,
+		      constraints = pkRMM :  rmm::PrimaryKey{
+	          name =  pkName,
+	          description = description,
+	          attributes = attRMM : rmm::Attribute {
+		          isNotNull = attributeNullable, 
+		          name = attributeName,
+		          defaultValue = attributeDefaultValue,
+		          size = attributeLength,
+		          dataType = dataTypeRMM
+		     }
+          }
+        };
+        
+       enforce domain target tableRelational : relational::BaseTable {
+          name = tableName,
+          constraints = pkRelational :  relational::PrimaryKey {
+          	name = pkName ,
+          	description = description,
+          	members = col:relational::Column {
+		          nullable = attributeNullable, 
+		          name = attributeName,		        
+		          defaultValue = attributeDefaultValue,
+		          length = attributeLength,
+		          dataType = dt_rel : relational::DataType{
+		            name = data_type
+		          },
+				  table = tableRelational
+		     }
+          } 
+        };
+     
+        where {
+        	data_type = getDataType(dataTypeRMM);        	              	       	    
+        }        
+                  
+    }
+    
+	relation RelationshipToFK{
+		fkName :String;  
+		uOperationRestrictionIntegrity:rmm::OperationRestrictionIntegrity;
+		dOperationRestrictionIntegrity:rmm::OperationRestrictionIntegrity;
+		uReferentialActionType:relational::ReferentialActionType;
+		dReferentialActionType:relational::ReferentialActionType;
+		pkName:String;
+		tableNamePk:String;
+		primitive domain tableName : String;
+		checkonly domain source relatioshipRMM :rmm::Relationship {
+				target = tgFK : rmm::ForeignKey {
+					name = fkName
+				},
+				source = relPK : rmm::PrimaryKey {
+					name = pkName
+				},
+				update = uOperationRestrictionIntegrity,
+				delete = dOperationRestrictionIntegrity
+		};
+        checkonly domain source tableRMM : rmm::Table {
+          name = tableNamePk,	
+		  constraints = fkRMM :  rmm::PrimaryKey{
+	          name =  pkName          
+	      }
+        };          
+        enforce domain target tableRelational : relational::BaseTable {
+           name = tableName, 
+           referencingForeignKeys = fkRelational :  relational::ForeignKey {
+	          	name = fkName,
+	          	referencedTable = ref : relational::BaseTable {
+	          		name = tableNamePk
+	          	},
+			    onUpdate = dReferentialActionType,
+			    onDelete = uReferentialActionType,
+				uniqueConstraint = constraints : relational::PrimaryKey{
+	            	name = pkName
+	            }
+		   }
+        };
+        where {        	
+        	dReferentialActionType = if dOperationRestrictionIntegrity->oclIsUndefined() then relational::ReferentialActionType::RESTRICT else getReferentialActionType(dOperationRestrictionIntegrity) endif;
+        	uReferentialActionType = getReferentialActionType(uOperationRestrictionIntegrity);            	 
+        }        
+    }
+
+    relation UniqueRMMTORelation{
+    	uniqueName :String;
+		attributeNullable: Boolean;
+		attributeDefaultValue: String;
+		attributeLength : Integer;
+		attributeName: String;
+		data_type : String;
+		dataTypeRMM:rmm::BaseType;
+    	description :String;
+    	tableName:String;
+        checkonly domain source tableRMM : rmm::Table {
+          name = tableName,
+		  constraints = pkRMM :  rmm::AlternateKey{
+	          name =  uniqueName,
+	          description = description,
+	          attributes = attRMM : rmm::Attribute {
+		          isNotNull = attributeNullable, 
+		          name = attributeName,
+		          defaultValue = attributeDefaultValue,
+		          size = attributeLength,
+		          dataType = dataTypeRMM
+		      }
+          }
+        };
+        
+        enforce domain target tableRelational : relational::BaseTable {
+          name = tableName,
+          constraints = uk :  relational::UniqueConstraint{
+          	name = uniqueName,
+          	description = description,
+			members = col:relational::Column {
+		          nullable = attributeNullable, 
+		          name = attributeName,		        
+		          defaultValue = attributeDefaultValue,
+		          length = attributeLength,
+		          dataType = dt_rel : relational::DataType{
+		            name = data_type
+		          },
+				  table = tableRelational
+		     }          	 
+          } 
+        };
+        
+        where {
+        	data_type = getDataType(dataTypeRMM);
+        }
+    }
+    
+    
+	relation CheckRMMTORelation{
+    	name :String;
+		condition: String;
+    	description :String;
+        checkonly domain source tableRMM : rmm::Table {
+		  constraints = constraintRMM :  rmm::Check{
+	          name =  name,
+	          description = description,
+	          condition = condition
+          }
+        };
+        
+        enforce domain target tableRelational : relational::BaseTable {
+          constraints = constraintRelational :  relational::CheckConstraint{
+          	name = name,
+          	description = description,
+          	searchCondition = condition          	 
+          } 
+        };
+    }    
+	
+    relation TriggerRMMToRelation{
+    	name :String;
+        update :Boolean;
+        insert :Boolean;
+        delete :Boolean;
+        dataTypeExecution  :rmm::ActionTimeType;
+        actionTime  :relational::ActionTimeType;
+        tableName :String;
+        tgTableName :String;
+        condition:String;
+        statementSQL:String;
+        actionGranularity:rmm::ActionGranularityType;
+        actionGranularityType:relational::ActionGranularityType;
+		oldRow:String;
+  		newRow:String;
+  		oldTable:String;
+  		newTable:String;
+  		    	        	    
+        checkonly domain source tableRMM : rmm::Table {
+		 name = tableName,        
+         constraints = triggerRMM : rmm::Trigger {
+			  name  = name,
+	          description = description,
+	          update = update,
+	          insert = insert,
+	          delete = delete,
+	          condition = condition,
+	          statementSQL = statementSQL,
+	          actionGranularity = actionGranularity,
+			  oldRow=oldRow,
+		  	  newRow=newRow,
+		  	  oldTable=oldTable,
+		  	  newTable=newTable,          
+	          actionTime = dataTypeExecution/*,
+	          triggerTables = ttRMM : rmm::Table {
+              	name = tgTableName
+          	  }*/
+          }
+        };  
+                
+        enforce domain target tableRelational : relational::BaseTable {
+            name = tableName, 
+        	triggers = triggerRelational : relational::Trigger {
+		  		name  = name ,
+		  		description = description,
+		        updateType = update,
+		        insertType = insert,
+		        deleteType = delete,
+		        condition = condition,
+	            statementSQL = statementSQL,
+  	            actionGranularity = actionGranularityType,
+				oldRow=oldRow,
+			    newRow=newRow,
+			  	oldTable=oldTable,
+			  	newTable=newTable,          		        
+		        actionTime = actionTime/*,
+		        triggerTables = ttRelational : relational::BaseTable {
+              		name = tgTableName
+          		} */
+		     }
+        };
+        when {
+        	actionTime = getActionTime(dataTypeExecution);
+        	actionGranularityType = getActionGranularityType(actionGranularity);
+        }
+        
+    }
+
+	top relation AssertionRMMToRelational{
+    	name :String;
+    	searchCondition: String;
+    	description:String;        
+        checkonly domain source assertionRMM : rmm::Assertion {
+		  name = name,
+		  condition = searchCondition,
+		  description = description
+        };          
+        enforce domain target assertionRelational : relational::Assertion {
+		  name = name,
+		  searchCondition = searchCondition,
+		  description = description
+	    };
+	}
+	
+	top relation DomainRMMToUserDefinedTypeRelational{
+    	name :String;
+    	defaultValue: String;  
+    	isNotNull: Boolean;
+		nameConstraint :String;
+        searchCondition:String;
+        dataTypeRMM:rmm::BaseType;
+        dataType:String;
+        description :String;      	      
+        
+        checkonly domain source domainRMM : rmm::Domain {
+		  name = name,
+		  description = description,
+		  defaultValue = defaultValue,
+		  isNotNull = isNotNull,
+		  dataType = dataTypeRMM,
+		  constraintCheckDomain =  constraintCheckDomain : rmm::Check {
+			name = nameConstraint,
+          	condition = searchCondition  		  
+		  }
+        };          
+	    checkonly  domain target dataTypeRelational : relational::DataType {
+	      name = dataType	   
+        };
+        enforce domain target userDefinedTypeRelational : relational::Domain {
+		  name = name,
+		  description = description,
+		  defaultValue = defaultValue,
+		  nullable = isNotNull,
+		  constraint = constraintRelational :  relational::CheckConstraint{
+          	name = nameConstraint,
+          	searchCondition = searchCondition          	 
+          } ,
+          referencedType = dataTypeRelational          
+	    };
+
+	    where {
+        	dataType = getDataType(dataTypeRMM);        	
+        }
+	}
+	
+	
+	
+	/* Return a relational column type for a correspondent eer attribute type */
+	query getDataType (typename : rmm::BaseType ) : String {
+	  if typename = rmm::BaseType::STRING  then 'STRING'
+	  else if typename = rmm::BaseType::BOOLEAN   then 'BOOLEAN'
+	  else if typename = rmm::BaseType::TIMESTAMP  then 'TIMESTAMP'
+	  else if typename = rmm::BaseType::FLOAT  then 'FLOAT'
+	  else if typename = rmm::BaseType::INTEGER then 'INTEGER'
+	  else if typename = rmm::BaseType::CLOB then 'CLOB'
+	  else if typename = rmm::BaseType::BLOB then 'BLOB' 
+	  else 'NULL' endif endif endif endif endif endif endif
+	}
+	
+	
+	query getActionGranularityType (execution : rmm::ActionGranularityType) : relational::ActionGranularityType {
+	  if execution = rmm::ActionGranularityType::ROW   then relational::ActionGranularityType::ROW
+	  else relational::ActionGranularityType::STATEMENT endif 
+	}
+	
+	query getActionTime (execution : rmm::ActionTimeType ) : relational::ActionTimeType {
+	  if execution = rmm::ActionTimeType::AFTER   then relational::ActionTimeType::AFTER
+	  else if execution = rmm::ActionTimeType::BEFORE   then relational::ActionTimeType::BEFORE
+	  else relational::ActionTimeType::INSTEADOF endif endif 
+	}
+	
+    query attributeNotIsPK( tableRMM :rmm::Table, attributeName :String ) : Boolean
+    {
+   		tableRMM.constraints.oclAsType(rmm::PrimaryKey).attributes->forAll(att | att.name = attributeName)->notEmpty()       
+	}
+	
+	query getForeignKey( tableRMM :rmm::Table, attributeName :String ) : rmm::ForeignKey
+    {
+   		tableRMM.constraints.oclAsType(rmm::PrimaryKey).relationship.target->at(1)       
+	}
+	
+	query getReferentialActionType( operationRestrictionIntegrity:rmm::OperationRestrictionIntegrity ) :relational::ReferentialActionType{
+		if operationRestrictionIntegrity = rmm::OperationRestrictionIntegrity::RESTRICT then relational::ReferentialActionType::RESTRICT
+		else if operationRestrictionIntegrity = rmm::OperationRestrictionIntegrity::CASCADE  then relational::ReferentialActionType::CASCADE
+		else if operationRestrictionIntegrity = rmm::OperationRestrictionIntegrity::NULL  then relational::ReferentialActionType::SET_NULL
+		else if operationRestrictionIntegrity = rmm::OperationRestrictionIntegrity::DEFAULT  then relational::ReferentialActionType::SET_DEFAULT
+		else relational::ReferentialActionType::RESTRICT
+		endif endif endif endif 
+	}
+}	

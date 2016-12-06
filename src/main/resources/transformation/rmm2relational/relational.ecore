@@ -1,0 +1,147 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ecore:EPackage xmi:version="2.0"
+    xmlns:xmi="http://www.omg.org/XMI" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xmlns:ecore="http://www.eclipse.org/emf/2002/Ecore" name="relational"
+    nsURI="relational" nsPrefix="relational">
+  <eClassifiers xsi:type="ecore:EClass" name="ENamedElement" abstract="true">
+    <eStructuralFeatures xsi:type="ecore:EAttribute" name="name" eType="ecore:EDataType http://www.eclipse.org/emf/2002/Ecore#//EString"/>
+  </eClassifiers>
+  <eClassifiers xsi:type="ecore:EClass" name="SQLObject" abstract="true" eSuperTypes="#//ENamedElement">
+    <eStructuralFeatures xsi:type="ecore:EAttribute" name="description" eType="ecore:EDataType http://www.eclipse.org/emf/2002/Ecore#//EString"/>
+    <eStructuralFeatures xsi:type="ecore:EAttribute" name="label" eType="ecore:EDataType http://www.eclipse.org/emf/2002/Ecore#//EString"/>
+    <eStructuralFeatures xsi:type="ecore:EReference" name="comments" upperBound="-1"
+        eType="#//Comment" eOpposite="#//Comment/sqlobject"/>
+  </eClassifiers>
+  <eClassifiers xsi:type="ecore:EClass" name="Comment" abstract="true">
+    <eStructuralFeatures xsi:type="ecore:EAttribute" name="description" eType="ecore:EDataType http://www.eclipse.org/emf/2002/Ecore#//EString"/>
+    <eStructuralFeatures xsi:type="ecore:EReference" name="sqlobject" lowerBound="1"
+        eType="#//SQLObject" eOpposite="#//SQLObject/comments"/>
+  </eClassifiers>
+  <eClassifiers xsi:type="ecore:EClass" name="DataType" eSuperTypes="#//SQLObject">
+    <eStructuralFeatures xsi:type="ecore:EReference" name="typedElement" upperBound="-1"
+        eType="#//TypedElement" eOpposite="#//TypedElement/dataType"/>
+  </eClassifiers>
+  <eClassifiers xsi:type="ecore:EClass" name="TypedElement" abstract="true" eSuperTypes="#//SQLObject">
+    <eStructuralFeatures xsi:type="ecore:EReference" name="dataType" lowerBound="1"
+        eType="#//DataType" eOpposite="#//DataType/typedElement"/>
+  </eClassifiers>
+  <eClassifiers xsi:type="ecore:EClass" name="Schema" eSuperTypes="#//SQLObject">
+    <eStructuralFeatures xsi:type="ecore:EReference" name="tables" upperBound="-1"
+        eType="#//Table" eOpposite="#//Table/schema"/>
+    <eStructuralFeatures xsi:type="ecore:EReference" name="triggers" upperBound="-1"
+        eType="#//Trigger" eOpposite="#//Trigger/schema"/>
+    <eStructuralFeatures xsi:type="ecore:EReference" name="assertions" upperBound="-1"
+        eType="#//Assertion" eOpposite="#//Assertion/schema"/>
+    <eStructuralFeatures xsi:type="ecore:EReference" name="userDefinedTypes" upperBound="-1"
+        eType="#//UserDefinedType" eOpposite="#//UserDefinedType/schema"/>
+  </eClassifiers>
+  <eClassifiers xsi:type="ecore:EClass" name="Trigger" eSuperTypes="#//SQLObject">
+    <eStructuralFeatures xsi:type="ecore:EAttribute" name="updateType" eType="ecore:EDataType http://www.eclipse.org/emf/2002/Ecore#//EBoolean"/>
+    <eStructuralFeatures xsi:type="ecore:EAttribute" name="insertType" eType="ecore:EDataType http://www.eclipse.org/emf/2002/Ecore#//EBoolean"/>
+    <eStructuralFeatures xsi:type="ecore:EAttribute" name="deleteType" eType="ecore:EDataType http://www.eclipse.org/emf/2002/Ecore#//EBoolean"/>
+    <eStructuralFeatures xsi:type="ecore:EAttribute" name="actionTime" eType="#//ActionTimeType"/>
+    <eStructuralFeatures xsi:type="ecore:EReference" name="schema" lowerBound="1"
+        eType="#//Schema" eOpposite="#//Schema/triggers"/>
+    <eStructuralFeatures xsi:type="ecore:EReference" name="table" lowerBound="1" eType="#//Table"
+        eOpposite="#//Table/triggers"/>
+    <eStructuralFeatures xsi:type="ecore:EReference" name="triggerTables" lowerBound="1"
+        upperBound="-1" eType="#//Table" eOpposite="#//Table/triggersConstrainted"/>
+    <eStructuralFeatures xsi:type="ecore:EAttribute" name="condition" eType="ecore:EDataType http://www.eclipse.org/emf/2002/Ecore#//EString"/>
+    <eStructuralFeatures xsi:type="ecore:EAttribute" name="statementSQL" eType="ecore:EDataType http://www.eclipse.org/emf/2002/Ecore#//EString"/>
+    <eStructuralFeatures xsi:type="ecore:EAttribute" name="oldRow" eType="ecore:EDataType http://www.eclipse.org/emf/2002/Ecore#//EString"/>
+    <eStructuralFeatures xsi:type="ecore:EAttribute" name="newRow" eType="ecore:EDataType http://www.eclipse.org/emf/2002/Ecore#//EString"/>
+    <eStructuralFeatures xsi:type="ecore:EAttribute" name="oldTable" eType="ecore:EDataType http://www.eclipse.org/emf/2002/Ecore#//EString"/>
+    <eStructuralFeatures xsi:type="ecore:EAttribute" name="newTable" eType="ecore:EDataType http://www.eclipse.org/emf/2002/Ecore#//EString"/>
+    <eStructuralFeatures xsi:type="ecore:EAttribute" name="actionGranularity" eType="#//ActionGranularityType"/>
+  </eClassifiers>
+  <eClassifiers xsi:type="ecore:EClass" name="Table" abstract="true" eSuperTypes="#//SQLObject">
+    <eStructuralFeatures xsi:type="ecore:EReference" name="schema" lowerBound="1"
+        eType="#//Schema" eOpposite="#//Schema/tables"/>
+    <eStructuralFeatures xsi:type="ecore:EReference" name="triggers" upperBound="-1"
+        eType="#//Trigger" eOpposite="#//Trigger/table"/>
+    <eStructuralFeatures xsi:type="ecore:EReference" name="triggersConstrainted" upperBound="-1"
+        eType="#//Trigger" eOpposite="#//Trigger/triggerTables"/>
+    <eStructuralFeatures xsi:type="ecore:EReference" name="columns" lowerBound="1"
+        upperBound="-1" eType="#//Column" eOpposite="#//Column/table"/>
+  </eClassifiers>
+  <eClassifiers xsi:type="ecore:EClass" name="Column" eSuperTypes="#//TypedElement">
+    <eStructuralFeatures xsi:type="ecore:EAttribute" name="nullable" eType="ecore:EDataType http://www.eclipse.org/emf/2002/Ecore#//EBoolean"/>
+    <eStructuralFeatures xsi:type="ecore:EAttribute" name="defaultValue" eType="ecore:EDataType http://www.eclipse.org/emf/2002/Ecore#//EString"/>
+    <eStructuralFeatures xsi:type="ecore:EAttribute" name="length" eType="ecore:EDataType http://www.eclipse.org/emf/2002/Ecore#//EInt"/>
+    <eStructuralFeatures xsi:type="ecore:EReference" name="table" lowerBound="1" eType="#//Table"
+        eOpposite="#//Table/columns"/>
+    <eStructuralFeatures xsi:type="ecore:EReference" name="referenceConstraint" lowerBound="1"
+        upperBound="-1" eType="#//ReferenceConstraint" eOpposite="#//ReferenceConstraint/members"/>
+    <eStructuralFeatures xsi:type="ecore:EReference" name="foreignKey" upperBound="-1"
+        eType="#//ForeignKey" eOpposite="#//ForeignKey/referencedMembers"/>
+    <eStructuralFeatures xsi:type="ecore:EAttribute" name="srid" eType="ecore:EDataType http://www.eclipse.org/emf/2002/Ecore#//EString"
+        defaultValueLiteral=""/>
+  </eClassifiers>
+  <eClassifiers xsi:type="ecore:EClass" name="BaseTable" eSuperTypes="#//Table">
+    <eStructuralFeatures xsi:type="ecore:EReference" name="referencingForeignKeys"
+        upperBound="-1" eType="#//ForeignKey" eOpposite="#//ForeignKey/referencedTable"/>
+    <eStructuralFeatures xsi:type="ecore:EReference" name="constraints" upperBound="-1"
+        eType="#//TableConstraint" eOpposite="#//TableConstraint/baseTable"/>
+  </eClassifiers>
+  <eClassifiers xsi:type="ecore:EClass" name="Constraint" abstract="true" eSuperTypes="#//SQLObject"/>
+  <eClassifiers xsi:type="ecore:EClass" name="TableConstraint" abstract="true" eSuperTypes="#//Constraint">
+    <eStructuralFeatures xsi:type="ecore:EReference" name="baseTable" lowerBound="1"
+        eType="#//BaseTable" eOpposite="#//BaseTable/constraints"/>
+  </eClassifiers>
+  <eClassifiers xsi:type="ecore:EClass" name="ReferenceConstraint" abstract="true"
+      eSuperTypes="#//TableConstraint">
+    <eStructuralFeatures xsi:type="ecore:EReference" name="members" lowerBound="1"
+        upperBound="-1" eType="#//Column" eOpposite="#//Column/referenceConstraint"/>
+  </eClassifiers>
+  <eClassifiers xsi:type="ecore:EClass" name="ForeignKey" eSuperTypes="#//ReferenceConstraint">
+    <eStructuralFeatures xsi:type="ecore:EReference" name="referencedTable" lowerBound="1"
+        eType="#//BaseTable" eOpposite="#//BaseTable/referencingForeignKeys"/>
+    <eStructuralFeatures xsi:type="ecore:EReference" name="uniqueConstraint" lowerBound="1"
+        eType="#//UniqueConstraint" eOpposite="#//UniqueConstraint/foreignKey"/>
+    <eStructuralFeatures xsi:type="ecore:EReference" name="referencedMembers" lowerBound="1"
+        upperBound="-1" eType="#//Column" eOpposite="#//Column/foreignKey"/>
+    <eStructuralFeatures xsi:type="ecore:EAttribute" name="onUpdate" eType="#//ReferentialActionType"/>
+    <eStructuralFeatures xsi:type="ecore:EAttribute" name="onDelete" eType="#//ReferentialActionType"/>
+  </eClassifiers>
+  <eClassifiers xsi:type="ecore:EClass" name="UniqueConstraint" eSuperTypes="#//ReferenceConstraint">
+    <eStructuralFeatures xsi:type="ecore:EReference" name="foreignKey" upperBound="-1"
+        eType="#//ForeignKey" eOpposite="#//ForeignKey/uniqueConstraint"/>
+  </eClassifiers>
+  <eClassifiers xsi:type="ecore:EClass" name="PrimaryKey" eSuperTypes="#//UniqueConstraint"/>
+  <eClassifiers xsi:type="ecore:EEnum" name="ActionTimeType">
+    <eLiterals name="AFTER"/>
+    <eLiterals name="BEFORE" value="1"/>
+    <eLiterals name="INSTEADOF" value="2"/>
+  </eClassifiers>
+  <eClassifiers xsi:type="ecore:EEnum" name="ReferentialActionType">
+    <eLiterals name="NO_ACTION"/>
+    <eLiterals name="RESTRICT" value="1"/>
+    <eLiterals name="CASCADE" value="2"/>
+    <eLiterals name="SET_NULL" value="3"/>
+    <eLiterals name="SET_DEFAULT" value="4"/>
+  </eClassifiers>
+  <eClassifiers xsi:type="ecore:EClass" name="CheckConstraint" eSuperTypes="#//TableConstraint">
+    <eStructuralFeatures xsi:type="ecore:EAttribute" name="searchCondition" eType="ecore:EDataType http://www.eclipse.org/emf/2002/Ecore#//EString"
+        defaultValueLiteral=""/>
+  </eClassifiers>
+  <eClassifiers xsi:type="ecore:EClass" name="Assertion" eSuperTypes="#//Constraint">
+    <eStructuralFeatures xsi:type="ecore:EAttribute" name="searchCondition" eType="ecore:EDataType http://www.eclipse.org/emf/2002/Ecore#//EString"/>
+    <eStructuralFeatures xsi:type="ecore:EReference" name="schema" lowerBound="1"
+        eType="#//Schema" eOpposite="#//Schema/assertions"/>
+  </eClassifiers>
+  <eClassifiers xsi:type="ecore:EClass" name="UserDefinedType" eSuperTypes="#//DataType">
+    <eStructuralFeatures xsi:type="ecore:EReference" name="schema" lowerBound="1"
+        eType="#//Schema" eOpposite="#//Schema/userDefinedTypes"/>
+  </eClassifiers>
+  <eClassifiers xsi:type="ecore:EClass" name="Domain" eSuperTypes="#//DistinctUserDefinedType">
+    <eStructuralFeatures xsi:type="ecore:EAttribute" name="defaultValue" eType="ecore:EDataType http://www.eclipse.org/emf/2002/Ecore#//EString"/>
+    <eStructuralFeatures xsi:type="ecore:EAttribute" name="nullable" eType="ecore:EDataType http://www.eclipse.org/emf/2002/Ecore#//EBoolean"/>
+    <eStructuralFeatures xsi:type="ecore:EReference" name="constraint" eType="#//CheckConstraint"/>
+    <eStructuralFeatures xsi:type="ecore:EReference" name="referencedType" eType="#//DataType"/>
+  </eClassifiers>
+  <eClassifiers xsi:type="ecore:EClass" name="DistinctUserDefinedType" eSuperTypes="#//UserDefinedType"/>
+  <eClassifiers xsi:type="ecore:EEnum" name="ActionGranularityType">
+    <eLiterals name="STATEMENT"/>
+    <eLiterals name="ROW" value="1"/>
+  </eClassifiers>
+</ecore:EPackage>

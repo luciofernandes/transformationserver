@@ -1,0 +1,893 @@
+[%
+out.print("-- #######################################################\n");
+out.print("--  Feature in construction, not completely ready to use  \n");
+out.print("--  Compatible with PostgreSQL                            \n");
+out.print("--  Edson Alves - eas4@cin.ufpe.br - 15/06/2016           \n");
+out.print("-- #######################################################\n");
+//out.print("-- DDL/SQL for PostgreSQL 9.3, released in 18/08/2014. \n\n");
+var columnCount : Integer;
+var constraintCount : Integer;
+var constraintCountTotal : Integer;
+var tableCount : Integer;
+var tableCountTotal : Integer;
+var comment : String;
+for(element in BaseTable.allInstances()) {
+  out.print("CREATE TABLE " + element.name + "( \n");
+  columnCount := 1;
+  for(column in element.columns){
+    out.print("    "+column.name);
+    //RMM: inclusao de comentario
+    if (not(column.description.isUndefined())) {
+    	comment = "COMMENT ON COLUMN " + element.name + "." + column.name + " IS '" + column.description + "'; \n";
+    }
+    //RMM: adicionando tipo de dados    
+    if(column.dataType.name = "STRING" ){
+      out.print(" VARCHAR");
+      if(column.length <> null and column.length <> 0){
+        out.print("("+column.length+")");
+      }else{
+        out.print("(255)");
+      }
+    } else if(column.dataType.name = "INTEGER" ){
+      out.print(" INTEGER");
+    } else if(column.dataType.name = "TIMESTAMP" ){
+      out.print(" TIMESTAMP");
+    } else if(column.dataType.name = "BOOLEAN" ){
+    	out.print(" BOOLEAN");
+    } else if(column.dataType.name = "FLOAT" ){
+    	out.print(" FLOAT");
+    } else if(column.dataType.name = "CLOB" ){
+    	out.print(" TEXT");
+    } else if(column.dataType.name = "BLOB" ){
+    	out.print(" BYTEA");
+    } else {
+    	out.print(" "+column.dataType.name);
+    }                      
+             
+    if(not(column.nullable)){
+      var existPKMember : Boolean;
+      existPKMember := false;
+      for(constraint in element.constraints){
+        if(not(constraint.isKindOf(ForeignKey))){
+          if(constraint.isKindOf(PrimaryKey)){
+            for(member in constraint.members){
+              if(column.name = member.name){
+			    existPKMember := true;	
+              }
+            }
+          }          
+        }
+      }
+      //TODO: mesmo se não existir pk deve aparecer o not null
+      //if (not(existPKMember)){
+        out.print(" NOT NULL");
+      //}    
+    }
+    //RMM: inlcuindo valor dafault
+    if (not (column.defaultValue.isUndefined())) {
+	    if(column.dataType.name = "STRING" ){
+	      	out.print(" DEFAULT '"+column.defaultValue+"'");
+		 } else {
+			out.print(" DEFAULT "+column.defaultValue);	 
+		 }
+	}
+    if(columnCount < element.columns.size()){
+      out.print(",\n");
+    }else{
+      var existPK : Boolean;
+      existPK := false;
+      if(element.constraints.size() > 0){
+        for(constraint in element.constraints){
+          if(constraint.isKindOf(PrimaryKey)){
+            existPK = true; 
+          }
+        }
+      }
+      if(existPK){
+        out.print(",\n");
+      }else{
+        out.print("\n");
+      }
+    }
+    
+    columnCount := columnCount + 1; 
+  }
+  //PK and UNIQUE Keys
+  constraintCountTotal := element.constraints->select(x | x.isKindOf(PrimaryKey)  or x.isKindOf(UniqueConstraint) ).size();
+  constraintCount := 1;
+  for(constraint in element.constraints){
+    //if(not(constraint.isKindOf(ForeignKey))){
+    if (constraint.isKindOf(PrimaryKey)  or constraint.isKindOf(UniqueConstraint)) {
+      //RMM:Incluido palavra reservada constraint
+      if (not (constraint.name.isUndefined())){
+      	out.print("    CONSTRAINT "+constraint.name);
+      }
+      else {
+        out.print("    ");
+      }
+      if(constraint.isKindOf(PrimaryKey)){
+        out.print(" PRIMARY KEY (");
+      } else {
+        out.print(" UNIQUE (");
+        }
+      columnCount := 1;
+      for(member in constraint.members){
+        if(columnCount < constraint.members.size()){
+          out.print(member.name+", ");
+        }else{
+          out.print(member.name);
+        }
+        columnCount := columnCount+1;
+      }
+      if(constraintCount < constraintCountTotal){
+ 
+       if(constraint.isKindOf(PrimaryKey)){
+              out.print(") ,\n");
+       }else{
+              out.print(") INITIALLY DEFERRED ,\n");
+       }
+        
+        
+      }else{
+        -- out.print(")\n"); 
+        if(constraint.isKindOf(PrimaryKey)){
+              out.print(") \n");
+       }else{
+              out.print(") INITIALLY DEFERRED \n");
+       }
+       
+        
+      }
+      constraintCount := constraintCount + 1;
+    }
+  }
+  out.print(");\n");
+  
+  if (not(element.description.isUndefined())){
+  	out.print("COMMENT ON TABLE " + element.name + " IS '"+ element.description +"';\n");
+  }
+  if (comment <> null){
+  	out.print(comment);
+  }
+  
+}
+
+//RMM: adicionando domain
+// Domain
+for (element in Domain.allInstances()){
+	out.print("CREATE DOMAIN "+ element.name +" AS ");
+    
+    for(referencedType in element.referencedType){
+	    if(referencedType.name = "STRING" ){
+	      out.print(" VARCHAR");
+	      out.print("\n");
+	    }
+	    if(referencedType.name = "INTEGER" ){
+	      out.print(" INTEGER");
+	      out.print("\n");
+	    }
+	    if(referencedType.name = "TIMESTAMP" ){
+	      out.print(" TIMESTAMP");
+	      out.print("\n");
+	    }
+	}
+	if (not (element.defaultValue.isUndefined())) {
+		out.print("     DEFAULT "+element.defaultValue);
+		out.print("\n");	
+	}
+	
+	if (not (element.nullable.isUndefined())) {
+		if (element.nullable == false) {
+			out.print("     NOT NULL ");
+			out.print("\n");
+		}
+	} 
+		
+	for(constraint in element.constraint){		
+		out.print("     CONSTRAINT "+ constraint.name +" CHECK ("+ constraint.searchCondition +");");
+		out.print("\n");		
+	}
+	
+}
+
+//RMM: adicionando check constraint
+// Check
+for (element in CheckConstraint.allInstances()){
+	if (not (element.baseTable.isUndefined())) {
+		out.print("ALTER TABLE " + element.baseTable.name + " ADD CONSTRAINT "+element.name+" CHECK ("+ element.searchCondition +");");
+		out.print("\n");
+	}
+}
+// Foreign Keys
+for(element in ForeignKey.allInstances()) {
+  //out.print("ALTER TABLE " + tb + "  ADD CONSTRAINT FK_"+tb+"_"+  ret2.substring(0,ret2.lastIndexOf(",")).replace(",","_") +" FOREIGN KEY(" + ret2.substring(0,ret2.lastIndexOf(",")) + ") REFERENCES  "+ a +"(" + ret.substring(0,ret.lastIndexOf(",")) + ");  \n");	
+  out.print("ALTER TABLE " + element.baseTable.name + " ADD CONSTRAINT "+element.name+" FOREIGN KEY (");
+  columnCount := 1;
+  for(member in element.members){
+    if(columnCount < element.members.size()){
+      out.print(member.name+", ");
+    }else{
+      out.print(member.name);
+    }
+    columnCount := columnCount+1;
+  }
+  out.print(") REFERENCES "+element.referencedTable.name+" (");
+  columnCount := 1;
+  for(member in element.uniqueConstraint.members){
+      if(columnCount < element.uniqueConstraint.members.size()){
+        out.print(member.name+", ");
+      }else{
+        out.print(member.name);
+      }
+      columnCount := columnCount+1;
+   }
+   //RMM:alterando para incluir update e delete cascada
+   if (element.onUpdate.isUndefined() or element.onDelete.isUndefined() ){
+   	out.print(");\n");
+   }else{
+   		out.print(")");
+   		if (not(element.onUpdate.isUndefined())){
+   			out.print("\n    ON UPDATE ");
+   			if(element.onUpdate = "CASCADE" ){
+   				out.print(" CASCADE");
+   			}
+   			else if(element.onUpdate = "NULL" ){
+   				out.print(" SET NULL");
+   			}
+   			else if(element.onUpdate = "DEFAULT" ){
+   				out.print(" SET DEFAULT");
+   			}
+   			else {
+   				out.print(" RESTRICT");   			
+			}
+   		}
+   		if (not(element.onDelete.isUndefined())){
+   			out.print("\n    ON DELETE ");
+   			if(element.onUpdate = "CASCADE" ){
+   				out.print(" CASCADE ");
+   			}
+   			else if(element.onUpdate = "NULL" ){
+   				out.print(" SET NULL");
+   			}
+   			else if(element.onUpdate = "DEFAULT" ){
+   				out.print(" SET DEFAULT");
+   			}
+   			else {
+   				out.print(" RESTRICT");   			
+			}
+   		}   
+		out.print(";\n");
+   }   
+}
+
+for(element in Trigger.allInstances()) {
+ if (not (element.triggerTables.isUndefined())) {
+	 -- 1
+	  if(element.updateType = true and element.insertType = false and element.deleteType = true and element.actionTime = ActionTimeType#AFTER){
+	    out.print('\nCREATE FUNCTION FUNCTION_'+element.name+'()\n');
+	    out.print('RETURNS TRIGGER AS $BODY$\n');
+	    for(table in element.triggerTables){
+	      out.print('    DECLARE count'+table.name+' INTEGER;\n');
+	    }
+	    out.print('    BEGIN\n');
+	    for(table in element.triggerTables){
+	      out.print('        SELECT COUNT(*) INTO count'+table.name+' \n        FROM '+element.table.name+'\n');
+	      out.print('        WHERE ');
+	      for(constraint in element.table.constraints){
+	        if(constraint.isKindOf(ForeignKey)){
+	          if(constraint.referencedTable = table){
+	            var splitSequence1 : new Sequence;
+	            var splitSequence2 : new Sequence;
+	            splitSequence1 := element.name.split("_");
+	            splitSequence2 := constraint.members.at(0).name.split("_");
+	                      
+	            if(splitSequence1.at(1) = splitSequence2.at(0)){
+	              constraintCountTotal := constraint.uniqueConstraint.members.size();
+	              constraintCount := 0;
+	              while (constraintCount < constraintCountTotal){
+	                out.print(element.table.name+'.'+constraint.members.at(constraintCount).name+' = OLD.'+constraint.members.at(constraintCount).name);
+	                if(constraintCount < constraintCountTotal-1){
+	                  out.print(' and ');
+	                }
+	                constraintCount := constraintCount + 1;
+	              }
+	            }
+	          }
+	        }
+	      }
+	      out.print(';\n\n');
+	      out.print('        IF count'+table.name+' = 0 THEN \n');
+	      out.print('            RAISE EXCEPTION \''+element.name+'\';\n');
+	      out.print('        END IF;\n\n');
+	  }
+	  
+	  out.print('        IF (TG_OP = \'DELETE\') THEN \n');
+	  out.print('            RETURN OLD; \n');
+	  out.print('        ELSIF (TG_OP = \'UPDATE\') THEN \n');
+	  out.print('            RETURN NEW;\n');  
+	  out.print('        END IF;\n\n'); 
+	    
+	  out.print('    END\n');
+	  out.print('$BODY$\nLANGUAGE plpgsql VOLATILE;\n\n');
+	  out.print('CREATE CONSTRAINT TRIGGER '+element.name+' ');
+	  out.print('AFTER DELETE OR UPDATE OF ');
+	  tableCountTotal := element.triggerTables.size();
+	  tableCount := 0;
+	  for(table in element.triggerTables){
+	    for(constraint in element.table.constraints){
+	    if(constraint.isKindOf(ForeignKey)){
+	      if(constraint.referencedTable = table){
+	       var splitSequence1 : new Sequence;
+	       var splitSequence2 : new Sequence;
+	        splitSequence1 := element.name.split("_");
+	        splitSequence2 := constraint.members.at(0).name.split("_");
+	        if(splitSequence1.at(1) = splitSequence2.at(0)){
+	          constraintCountTotal := constraint.uniqueConstraint.members.size();
+	          constraintCount := 0;
+	          while (constraintCount < constraintCountTotal){
+	            out.print(constraint.members.at(constraintCount).name);
+	            if(constraintCount < (constraintCountTotal-1)){
+	              out.print(', ');
+	            } 
+	            constraintCount := constraintCount + 1;
+	            }
+	          }
+	        }
+	      }
+	    }
+	              if(tableCount < (tableCountTotal-1)){
+	              out.print(', ');
+	            } 
+	            tableCount := tableCount + 1;
+	  }
+	  out.print(' ON '+element.table.name+' INITIALLY DEFERRED \n');
+	  out.print('FOR EACH ROW ');
+	  out.print('EXECUTE PROCEDURE FUNCTION_'+element.name+'();\n');
+	  
+	  }
+	
+	--2 
+	  if(element.insertType = true and element.deleteType = false   and element.updateType = false and element.actionTime = ActionTimeType#AFTER){
+	    out.print('\nCREATE FUNCTION FUNCTION_'+element.name+'()\n');
+	    out.print('RETURNS TRIGGER AS $BODY$\n');
+	    for(table in element.triggerTables){
+	        out.print('    DECLARE count'+element.table.name+' INTEGER;\n');
+	    }
+	    out.print('    BEGIN\n');
+	    for(table in element.triggerTables){
+	      out.print('        SELECT COUNT(*) INTO count'+element.table.name+' \n        FROM '+table.name+'\n');
+	      out.print('        WHERE ');
+	      for(constraint in table.constraints){
+	        if(constraint.isKindOf(ForeignKey)){
+	          if(constraint.referencedTable = element.table){
+	            var splitSequence1 : new Sequence;
+	            var splitSequence2 : new Sequence;
+	            splitSequence1 := element.name.split("_");
+	            splitSequence2 := constraint.members.at(0).name.split("_");
+	            -- R do TR = R da FK    
+	            if(splitSequence1.at(1) = splitSequence2.at(0)){
+	              constraintCountTotal := constraint.uniqueConstraint.members.size();
+	              constraintCount := 0;
+	              while (constraintCount < constraintCountTotal){
+	                out.print(table.name+'.'+constraint.members.at(constraintCount).name+' = NEW.'+constraint.uniqueConstraint.members.at(constraintCount).name);
+	                if(constraintCount < constraintCountTotal-1){
+	                  out.print(' and ');
+	                }
+	                constraintCount := constraintCount + 1;
+	              }
+	              
+	            }
+	          }
+	        }
+	      }
+	      out.print(';\n\n');
+	      
+	      out.print('        IF count'+element.table.name+' = 0 THEN \n');
+	      out.print('            RAISE EXCEPTION \''+element.name+'\';\n');
+	      out.print('        END IF;\n');   
+	      
+	      out.print('\n        RETURN NEW;\n');       
+	    }
+	    out.print('    END\n');
+	    out.print('$BODY$\nLANGUAGE plpgsql VOLATILE;\n\n');
+	    out.print('CREATE CONSTRAINT TRIGGER '+element.name+' ');
+	    out.print('AFTER INSERT ON '+element.table.name+' INITIALLY DEFERRED\n');
+	    out.print('FOR EACH ROW ');
+	    out.print('EXECUTE PROCEDURE FUNCTION_'+element.name+'();\n');
+	  }
+	  -- 3 Heranca supercalsse
+	   if(element.insertType = true and element.updateType = false and  element.deleteType = false and element.actionTime = ActionTimeType#BEFORE){
+	    out.print('\nCREATE FUNCTION FUNCTION_'+element.name+'()\n');
+	    out.print('RETURNS TRIGGER AS $BODY$\n');
+	    for(table in element.triggerTables){
+	     out.print('    DECLARE count'+table.name+' INTEGER;\n');
+	    }
+	    out.print('    BEGIN\n');
+	    for(table in element.triggerTables){
+	      out.print('        SELECT COUNT(*) INTO count'+table.name+' \n        FROM '+table.name+'\n');
+	      out.print('        WHERE ');
+	      for(constraint in element.table.constraints){
+	        if(constraint.isKindOf(PrimaryKey)){
+	          var splitSequence1 : new Sequence;
+	          var splitSequence2 : new Sequence;
+	          splitSequence1 := element.name.split("_");
+	          splitSequence2 := constraint.members.at(0).name.split("_");
+	          
+	         // out.print(splitSequence1.at(1) +' '+ splitSequence2.at(0));
+	         // if(splitSequence1.at(1) = splitSequence2.at(0)){
+	            constraintCountTotal := constraint.members.size();
+	            constraintCount := 0;
+	            while (constraintCount < constraintCountTotal){
+	              for(constraint2 in table.constraints){
+	                if(constraint2.isKindOf(PrimaryKey)){          
+	                  out.print(table.name+'.'+constraint2.members.at(constraintCount).name+' = NEW.'+constraint.members.at(constraintCount).name) ;
+	                  if(constraintCount < constraintCountTotal-1){
+	                    out.print(' and ');
+	                  }
+	                  constraintCount := constraintCount + 1;
+	                }
+	              }
+	            }
+	         // }
+	        }
+	      }
+	      out.print(';\n\n');
+	    }
+	    out.print('        IF ');
+	    constraintCountTotal := element.triggerTables.size();
+	    constraintCount := 0;
+	    for(table in element.triggerTables){
+	      out.print('count'+table.name);
+	      constraintCount := constraintCount+1;
+	      if(constraintCount < constraintCountTotal){
+	        out.print(' + ');
+	      }
+	    }
+	    out.print(' = 0 THEN \n');
+	    out.print('            RAISE EXCEPTION \''+element.name+'\';\n');
+	    out.print('        END IF;\n');
+	    out.print('\n        RETURN NEW;\n');
+	       
+	    out.print('    END\n');
+	    out.print('$BODY$\nLANGUAGE plpgsql VOLATILE;\n\n');
+	    out.print('CREATE CONSTRAINT  TRIGGER '+element.name+' ');
+	    out.print('AFTER INSERT ON '+element.table.name+' INITIALLY DEFERRED \n');
+	    out.print('FOR EACH ROW ');
+	    out.print('EXECUTE PROCEDURE FUNCTION_'+element.name+'();\n');
+	  } 
+	  
+	  -- Herancao subclasse
+	  if(element.insertType = true and element.updateType = false and  element.deleteType = true and element.actionTime = ActionTimeType#BEFORE){
+	    out.print('\nCREATE FUNCTION FUNCTION_'+element.name+'()\n');
+	    out.print('RETURNS TRIGGER AS $BODY$\n');
+	    for(table in element.triggerTables){
+	     out.print('    DECLARE count'+table.name+' INTEGER;\n');
+	    }
+	    out.print('    BEGIN\n');
+	    for(table in element.triggerTables){
+	      out.print('        SELECT COUNT(*) INTO count'+table.name+' \n        FROM '+table.name+'\n');
+	      out.print('        WHERE ');
+	      for(constraint in element.table.constraints){
+	        if(constraint.isKindOf(PrimaryKey)){
+	          var splitSequence1 : new Sequence;
+	          var splitSequence2 : new Sequence;
+	          splitSequence1 := element.name.split("_");
+	          splitSequence2 := constraint.members.at(0).name.split("_");
+	            constraintCountTotal := constraint.members.size();
+	            constraintCount := 0;
+	            while (constraintCount < constraintCountTotal){
+	              for(constraint2 in table.constraints){
+	                if(constraint2.isKindOf(PrimaryKey)){          
+	                  out.print(table.name+'.'+constraint2.members.at(constraintCount).name+' = NEW.'+constraint.members.at(constraintCount).name) ;
+	                  if(constraintCount < constraintCountTotal-1){
+	                    out.print(' and ');
+	                  }
+	                  constraintCount := constraintCount + 1;
+	                }
+	              }
+	            }
+	         // }
+	        }
+	      }
+	      out.print(';\n\n');
+	    }
+	    out.print('        IF ');
+	    constraintCountTotal := element.triggerTables.size();
+	    constraintCount := 0;
+	    for(table in element.triggerTables){
+	      out.print('count'+table.name);
+	      constraintCount := constraintCount+1;
+	      if(constraintCount < constraintCountTotal){
+	        out.print(' + ');
+	      }
+	    }
+	    out.print(' <> 0 THEN \n');
+	    out.print('            RAISE EXCEPTION \''+element.name+'\';\n');
+	    out.print('        END IF;\n\n');
+	    out.print('        RETURN NEW;\n');  
+	     
+	    out.print('    END\n');
+	    out.print('$BODY$\nLANGUAGE plpgsql VOLATILE;\n\n');
+	    out.print('CREATE CONSTRAINT TRIGGER '+element.name+' ');
+	    -- out.print('BEFORE INSERT OR UPDATE ON '+element.table.name+'\n');
+	    out.print(' \n AFTER INSERT OR UPDATE OF ');
+	    
+	    tableCountTotal := element.triggerTables.size();
+	    tableCount := 0;
+	    for(table in element.triggerTables){
+	    for(constraint in element.table.constraints){
+	    if(constraint.isKindOf(PrimaryKey)){
+	       var splitSequence1 : new Sequence;
+	       var splitSequence2 : new Sequence;
+	        splitSequence1 := element.name.split("_");
+	        splitSequence2 := constraint.members.at(0).name.split("_");
+	          constraintCountTotal := constraint.members.size();
+	          constraintCount := 0;
+	          while (constraintCount < constraintCountTotal){
+	            out.print(constraint.members.at(constraintCount).name);
+	            if(constraintCount < (constraintCountTotal-1)){
+	              out.print(' , ');
+	            } 
+	            constraintCount := constraintCount + 1;
+	          }
+	    }
+	    }
+	    if(tableCount < (tableCountTotal-1)){
+	              out.print(', ');
+	            } 
+	            tableCount := tableCount + 1;
+	    }
+	    out.print(' ON '+element.table.name+' INITIALLY DEFERRED \n');  
+	    
+	    
+	    out.print('FOR EACH ROW ');
+	    out.print('EXECUTE PROCEDURE FUNCTION_'+element.name+'();\n');
+	  } 
+	  -- heranÃ§a sub-entidade 2
+	  if(element.insertType = true and element.updateType = true and  element.deleteType = true and element.actionTime = ActionTimeType#INSTEADOF){
+	    out.print('\nCREATE FUNCTION FUNCTION_'+element.name+'()\n');
+	    out.print('RETURNS TRIGGER AS $BODY$\n');
+	    for(table in element.triggerTables){
+	     out.print('    DECLARE count'+table.name+' INTEGER;\n');
+	    }
+	    out.print('    BEGIN\n');
+	    out.print('        IF (TG_OP = \'DELETE\' OR TG_OP = \'UPDATE\') THEN\n');
+	    for(table in element.triggerTables){
+	
+	      
+	 
+	     
+	    
+	      out.print('            SELECT COUNT(*) INTO count'+table.name+' \n            FROM '+table.name+'\n');
+	      out.print('            WHERE ');
+	      for(constraint in element.table.constraints){
+	        if(constraint.isKindOf(PrimaryKey)){
+	          var splitSequence1 : new Sequence;
+	          var splitSequence2 : new Sequence;
+	          splitSequence1 := element.name.split("_");
+	          splitSequence2 := constraint.members.at(0).name.split("_");
+	          
+	         // out.print(splitSequence1.at(1) +' '+ splitSequence2.at(0));
+	         // if(splitSequence1.at(1) = splitSequence2.at(0)){
+	            constraintCountTotal := constraint.members.size();
+	            constraintCount := 0;
+	            while (constraintCount < constraintCountTotal){
+	              for(constraint2 in table.constraints){
+	                if(constraint2.isKindOf(PrimaryKey)){          
+	                  out.print(table.name+'.'+constraint2.members.at(constraintCount).name+' = OLD.'+constraint.members.at(constraintCount).name) ;
+	                  if(constraintCount < constraintCountTotal-1){
+	                    out.print(' and ');
+	                  }
+	                  constraintCount := constraintCount + 1;
+	                }
+	              }
+	            }
+	         // }
+	        }
+	      }
+	      out.print(';\n\n');
+	      
+	      // fim select
+	      
+	    }
+	    
+	    out.print('            IF ');
+	    constraintCountTotal := element.triggerTables.size();
+	    constraintCount := 0;
+	    for(table in element.triggerTables){
+	      out.print('count'+table.name);
+	      constraintCount := constraintCount+1;
+	      if(constraintCount < constraintCountTotal){
+	        out.print(' + ');
+	      }
+	    }
+	    out.print(' = 0 THEN \n');
+	    out.print('                RAISE EXCEPTION \''+element.name+'\';\n');
+	    out.print('            END IF;\n');
+	    
+	    out.print('        END IF; \n');
+	    out.print('        IF (TG_OP = \'INSERT\' OR TG_OP = \'UPDATE\') THEN\n');
+	    for(table in element.triggerTables){
+	
+	      
+	 
+	     
+	    
+	      out.print('            SELECT COUNT(*) INTO count'+table.name+' \n            FROM '+table.name+'\n');
+	      out.print('            WHERE ');
+	      for(constraint in element.table.constraints){
+	        if(constraint.isKindOf(PrimaryKey)){
+	          var splitSequence1 : new Sequence;
+	          var splitSequence2 : new Sequence;
+	          splitSequence1 := element.name.split("_");
+	          splitSequence2 := constraint.members.at(0).name.split("_");
+	          
+	         // out.print(splitSequence1.at(1) +' '+ splitSequence2.at(0));
+	         // if(splitSequence1.at(1) = splitSequence2.at(0)){
+	            constraintCountTotal := constraint.members.size();
+	            constraintCount := 0;
+	            while (constraintCount < constraintCountTotal){
+	              for(constraint2 in table.constraints){
+	                if(constraint2.isKindOf(PrimaryKey)){          
+	                  out.print(table.name+'.'+constraint2.members.at(constraintCount).name+' = NEW.'+constraint.members.at(constraintCount).name) ;
+	                  if(constraintCount < constraintCountTotal-1){
+	                    out.print(' and ');
+	                  }
+	                  constraintCount := constraintCount + 1;
+	                }
+	              }
+	            }
+	         // }
+	        }
+	      }
+	      out.print(';\n\n');
+	      
+	      // fim select
+	      
+	    }
+	    
+	    out.print('            IF ');
+	    constraintCountTotal := element.triggerTables.size();
+	    constraintCount := 0;
+	    for(table in element.triggerTables){
+	      out.print('count'+table.name);
+	      constraintCount := constraintCount+1;
+	      if(constraintCount < constraintCountTotal){
+	        out.print(' + ');
+	      }
+	    }
+	    out.print(' <> 0 THEN \n');
+	    out.print('                RAISE EXCEPTION \''+element.name+'\';\n');
+	    out.print('            END IF;\n');
+	    
+	    out.print('        END IF; \n');
+	     
+	      out.print('       IF (TG_OP = \'DELETE\') THEN \n');
+	  out.print('            RETURN OLD; \n');
+	  out.print('        ELSIF (TG_OP = \'UPDATE\' OR TG_OP = \'INSERT\') THEN \n');
+	  out.print('            RETURN NEW;\n');  
+	  out.print('        END IF;\n'); 
+	   
+	    out.print('    END\n');
+	    out.print('$BODY$\nLANGUAGE plpgsql VOLATILE;\n\n');
+	    out.print('CREATE CONSTRAINT TRIGGER '+element.name+' ');
+	    --out.print('BEFORE INSERT OR UPDATE OR DELETE ON '+element.table.name+'\n');
+	    out.print('AFTER \n INSERT OR DELETE OR UPDATE OF ');
+	    tableCountTotal := element.triggerTables.size();
+	    tableCount := 0;
+	    for(table in element.triggerTables){
+	    for(constraint in element.table.constraints){
+	    if(constraint.isKindOf(PrimaryKey)){
+	       var splitSequence1 : new Sequence;
+	       var splitSequence2 : new Sequence;
+	        splitSequence1 := element.name.split("_");
+	        splitSequence2 := constraint.members.at(0).name.split("_");
+	          constraintCountTotal := constraint.members.size();
+	          constraintCount := 0;
+	          while (constraintCount < constraintCountTotal){
+	            out.print(constraint.members.at(constraintCount).name);
+	            if(constraintCount < (constraintCountTotal-1)){
+	              out.print(' , ');
+	            } 
+	            constraintCount := constraintCount + 1;
+	          }
+	    }
+	  }
+	   if(tableCount < (tableCountTotal-1)){
+	              out.print(', ');
+	            } 
+	            tableCount := tableCount + 1;
+	  }
+	    out.print(' ON '+element.table.name+' INITIALLY DEFERRED \n');  
+	    
+	    out.print('FOR EACH ROW ');
+	    out.print('EXECUTE PROCEDURE FUNCTION_'+element.name+'();\n');
+	  } 
+	  -- Sobreposta Superentidade
+	   if(element.insertType = true and element.updateType = true and  element.deleteType = false and element.actionTime = ActionTimeType#BEFORE){
+	    out.print('\nCREATE FUNCTION FUNCTION_'+element.name+'()\n');
+	    out.print('RETURNS TRIGGER AS $BODY$\n');
+	    for(table in element.triggerTables){
+	     out.print('    DECLARE count'+table.name+' INTEGER;\n');
+	    }
+	    out.print('    BEGIN\n');
+	    for(table in element.triggerTables){
+	      out.print('        SELECT COUNT(*) INTO count'+table.name+' \n        FROM '+table.name+'\n');
+	      out.print('        WHERE ');
+	      for(constraint in element.table.constraints){
+	        if(constraint.isKindOf(PrimaryKey)){
+	          var splitSequence1 : new Sequence;
+	          var splitSequence2 : new Sequence;
+	          splitSequence1 := element.name.split("_");
+	          splitSequence2 := constraint.members.at(0).name.split("_");
+	          
+	         // out.print(splitSequence1.at(1) +' '+ splitSequence2.at(0));
+	         // if(splitSequence1.at(1) = splitSequence2.at(0)){
+	            constraintCountTotal := constraint.members.size();
+	            constraintCount := 0;
+	            while (constraintCount < constraintCountTotal){
+	              for(constraint2 in table.constraints){
+	                if(constraint2.isKindOf(PrimaryKey)){          
+	                  out.print(table.name+'.'+constraint2.members.at(constraintCount).name+' = NEW.'+constraint.members.at(constraintCount).name) ;
+	                  if(constraintCount < constraintCountTotal-1){
+	                    out.print(' and ');
+	                  }
+	                  constraintCount := constraintCount + 1;
+	                }
+	              }
+	            }
+	         // }
+	        }
+	      }
+	      out.print(';\n\n');
+	    }
+	    out.print('        IF ');
+	    constraintCountTotal := element.triggerTables.size();
+	    constraintCount := 0;
+	    for(table in element.triggerTables){
+	      out.print('count'+table.name);
+	      constraintCount := constraintCount+1;
+	      if(constraintCount < constraintCountTotal){
+	        out.print(' + ');
+	      }
+	    }
+	    out.print(' = 0 THEN \n');
+	    out.print('            RAISE EXCEPTION \''+element.name+'\';\n');
+	    out.print('        END IF;\n');
+	    out.print('\n        RETURN NEW;\n');
+	    out.print('    END\n');
+	    out.print('$BODY$\nLANGUAGE plpgsql VOLATILE;\n\n');
+	    out.print('CREATE CONSTRAINT TRIGGER '+element.name+' ');
+	    out.print('AFTER INSERT ON '+element.table.name+' INITIALLY DEFERRED \n');
+	    out.print('FOR EACH ROW ');
+	    out.print('EXECUTE PROCEDURE FUNCTION_'+element.name+'();\n');
+	  }  
+	  -- Sobreposta Subentidade  
+	   if(element.insertType = true and element.updateType = true and  element.deleteType = true and element.actionTime = ActionTimeType#BEFORE){
+	    out.print('\nCREATE FUNCTION FUNCTION_'+element.name+'()\n');
+	    out.print('RETURNS TRIGGER AS $BODY$\n');
+	    for(table in element.triggerTables){
+	     out.print('    DECLARE count'+table.name+' INTEGER;\n');
+	    }
+	    out.print('    BEGIN\n');
+	    for(table in element.triggerTables){
+	      out.print('        SELECT COUNT(*) INTO count'+table.name+' \n        FROM '+table.name+'\n');
+	      out.print('        WHERE ');
+	      for(constraint in element.table.constraints){
+	        if(constraint.isKindOf(PrimaryKey)){
+	          var splitSequence1 : new Sequence;
+	          var splitSequence2 : new Sequence;
+	          splitSequence1 := element.name.split("_");
+	          splitSequence2 := constraint.members.at(0).name.split("_");
+	          
+	         // out.print(splitSequence1.at(1) +' '+ splitSequence2.at(0));
+	         // if(splitSequence1.at(1) = splitSequence2.at(0)){
+	            constraintCountTotal := constraint.members.size();
+	            constraintCount := 0;
+	            while (constraintCount < constraintCountTotal){
+	              for(constraint2 in table.constraints){
+	                if(constraint2.isKindOf(PrimaryKey)){          
+	                  out.print(table.name+'.'+constraint2.members.at(constraintCount).name+' = OLD.'+constraint.members.at(constraintCount).name) ;
+	                  if(constraintCount < constraintCountTotal-1){
+	                    out.print(' and ');
+	                  }
+	                  constraintCount := constraintCount + 1;
+	                }
+	              }
+	            }
+	         // }
+	        }
+	      }
+	      out.print(';\n\n');
+	    }
+	    out.print('        IF ');
+	    constraintCountTotal := element.triggerTables.size();
+	    constraintCount := 0;
+	    for(table in element.triggerTables){
+	      out.print('count'+table.name);
+	      constraintCount := constraintCount+1;
+	      if(constraintCount < constraintCountTotal){
+	        out.print(' + ');
+	      }
+	    }
+	    out.print(' = 0 THEN \n');
+	    out.print('            RAISE EXCEPTION \''+element.name+'\';\n');
+	    out.print('        END IF;\n');
+	     
+	    out.print('       IF (TG_OP = \'DELETE\') THEN \n');
+	    out.print('            RETURN OLD; \n');
+	    out.print('        ELSIF (TG_OP = \'UPDATE\') THEN \n');
+	    out.print('            RETURN NEW;\n');  
+	    out.print('        END IF;\n'); 
+	  
+	    out.print('    END\n');
+	    out.print('$BODY$\nLANGUAGE plpgsql VOLATILE;\n\n');
+	    out.print('CREATE CONSTRAINT TRIGGER '+element.name+' ');
+	    //out.print('BEFORE DELETE OR UPDATE ON '+element.table.name+'\n');
+	    out.print('AFTER DELETE OR UPDATE OF ');
+	    tableCountTotal := element.triggerTables.size();
+	    tableCount := 0;
+	    for(table in element.triggerTables){
+	    for(constraint in element.table.constraints){
+	    if(constraint.isKindOf(PrimaryKey)){
+	       var splitSequence1 : new Sequence;
+	       var splitSequence2 : new Sequence;
+	        splitSequence1 := element.name.split("_");
+	        splitSequence2 := constraint.members.at(0).name.split("_");
+	          constraintCountTotal := constraint.members.size();
+	          constraintCount := 0;
+	          while (constraintCount < constraintCountTotal){
+	            out.print(constraint.members.at(constraintCount).name);
+	            if(constraintCount < (constraintCountTotal-1)){
+	              out.print(' , ');
+	            } 
+	            constraintCount := constraintCount + 1;
+	          }
+	    }
+	  }
+	  if(tableCount < (tableCountTotal-1)){
+	              out.print(', ');
+	            } 
+	            tableCount := tableCount + 1;
+	  }
+	  out.print(' ON '+element.table.name+' INITIALLY DEFERRED \n');
+	    
+	    
+	    out.print('FOR EACH ROW ');
+	    out.print('EXECUTE PROCEDURE FUNCTION_'+element.name+'();\n');
+	  }
+	} 
+	//RMM: trigger geradas 
+	else {
+
+	    out.print('\nCREATE FUNCTION FUNCTION_'+element.name+'()\n');
+	    out.print('RETURNS TRIGGER AS $BODY$\n');
+	    out.print('    BEGIN\n');
+	    out.print('     '+element.statementSQL);
+	    out.print('    END\n');
+	    out.print('$BODY$\nLANGUAGE plpgsql VOLATILE;\n\n');
+	    
+	    out.print('CREATE CONSTRAINT TRIGGER '+element.name+' ');
+	    
+	    if (element.actionTime == ''){
+	    	out.print('AFTER DELETE OR UPDATE OF ');
+	    } 
+	    else if (element.actionTime == ''){
+	    	out.print('AFTER DELETE OR UPDATE OF ');
+	    }
+	    else {
+	    	out.print('AFTER DELETE OR UPDATE OF ');
+	    }
+	    
+		out.print(' ON '+element.table.name+' INITIALLY DEFERRED \n');
+		if (element.actionGranularity == 'STATEMENT') {
+			out.print('FOR STATEMENT\n');
+		}
+		else {
+			out.print('FOR EACH ROW\n');
+		}	
+		out.print('EXECUTE PROCEDURE FUNCTION_'+element.name+'();\n');
+	 	
+	}  
+}
+%]
